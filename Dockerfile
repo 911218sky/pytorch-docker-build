@@ -22,7 +22,7 @@ RUN set -eux; \
     \
     python -m pip install --upgrade pip setuptools wheel; \
     python -m pip install --no-cache-dir \
-        torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128; \
+      torch torchvision --index-url https://download.pytorch.org/whl/cu129; \
     \
     apt-get purge -y --auto-remove build-essential pkg-config; \
     apt-get clean; \

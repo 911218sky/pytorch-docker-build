@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_TAG="${1:-sky1218/pytorch:2.7.1-cuda12.8-py3.11}"
+IMAGE_TAG="${1:-sky1218/pytorch:2.8.0-cuda12.9-py3.11}"
 USE_GPU="${2:-gpu}"
 
 SCRIPT="test.py"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Defaults
-TAG="${1:-sky1218/pytorch:2.7.1-cuda12.8-py3.11}"
+TAG="${1:-sky1218/pytorch:2.8.0-cuda12.9-py3.11}"
 # linux/amd64,linux/arm64
 PLATFORMS="${2:-}"
 DOCKERFILE="${3:-Dockerfile}"
