@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # GitHub repository info
-OWNER="sky1218"
+OWNER="911218sky"
 REPO="pytorch-docker-build"
 WORKFLOW_FILE="build-pytorch.yml"
 
