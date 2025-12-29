@@ -28,7 +28,7 @@ RUN set -eux; \
     \
     python -m pip install --upgrade pip setuptools wheel; \
     python -m pip install --no-cache-dir \
-      torch==${TORCH_VERSION} torchvision --index-url https://download.pytorch.org/whl/${CUDA_VERSION}; \
+      torch==${TORCH_VERSION} torchvision torchaudio --index-url https://download.pytorch.org/whl/${CUDA_VERSION}; \
     \
     apt-get purge -y --auto-remove build-essential pkg-config; \
     apt-get clean; \
