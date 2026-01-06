@@ -21,7 +21,6 @@ ARG CUDA_VERSION=12.2
 ARG PYTHON_VERSION=3.11
 
 # Build configuration
-ARG MAX_JOBS=4
 ARG BUILD_TEST=0
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -38,8 +37,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     USE_DISTRIBUTED=1 \
     USE_TENSORRT=0 \
     TORCH_CUDA_ARCH_LIST="7.2;8.7" \
-    MAX_JOBS=${MAX_JOBS} \
     BUILD_TEST=${BUILD_TEST}
+# MAX_JOBS not set = use all available cores (nproc)
 
 # Install build dependencies for Python compilation
 RUN set -eux; \

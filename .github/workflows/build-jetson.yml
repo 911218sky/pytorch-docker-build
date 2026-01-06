@@ -8,11 +8,6 @@ on:
         required: true
         default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"12.2","python":"3.11"}]'
         type: string
-      max_jobs:
-        description: "Max parallel compile jobs (lower = less memory, slower)"
-        required: false
-        default: "4"
-        type: string
 
 env:
   DOCKERHUB_IMAGE: sky1218/pytorch-jetson
@@ -21,13 +16,13 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 480 # 8 hours timeout for source compilation
+    timeout-minutes: 360 # 6 hours (GitHub maximum)
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
-      max-parallel: 2 # Limit parallel builds to avoid resource issues
+      # Public repo: unlimited free minutes, no need to limit parallel builds
       matrix:
         version: ${{ fromJson(inputs.versions) }}
 
@@ -52,10 +47,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          config-inline: |
-            [worker.oci]
-              max-parallelism = 2
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -89,7 +80,7 @@ jobs:
           echo "  PyTorch: $TORCH_VERSION (building from source)"
           echo "  CUDA: $CUDA_VERSION"
           echo "  Python: $PYTHON_VERSION (building from source)"
-          echo "  Max Jobs: ${{ inputs.max_jobs }}"
+          echo "  Using all available CPU cores for compilation"
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -106,7 +97,6 @@ jobs:
             TORCH_VERSION=${{ matrix.version.torch }}
             CUDA_VERSION=${{ matrix.version.cuda }}
             PYTHON_VERSION=${{ matrix.version.python }}
-            MAX_JOBS=${{ inputs.max_jobs }}
             BUILD_TEST=0
           cache-from: type=gha
           cache-to: type=gha,mode=max
