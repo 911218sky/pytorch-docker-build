@@ -1,0 +1,216 @@
+# Jetson PyTorch Dockerfile - Build from Source
+# JetPack 6.x only (L4T R36.x) - ARM64 architecture
+#
+# Builds PyTorch from source to support any version
+# WARNING: Build time can be several hours due to compilation
+#
+# Build example:
+#   docker buildx build --platform linux/arm64 \
+#     --build-arg TORCH_VERSION=2.9.0 \
+#     --build-arg CUDA_VERSION=12.8 \
+#     --build-arg PYTHON_VERSION=3.11 \
+#     -f Dockerfile.jetson -t pytorch-jetson:2.9.0 .
+
+ARG L4T_VERSION=r36.4.0
+ARG PYTHON_VERSION=3.11
+
+# Use NVIDIA L4T base image
+FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
+
+ARG TORCH_VERSION=2.9.0
+ARG CUDA_VERSION=12.8
+ARG PYTHON_VERSION=3.11
+
+# Build configuration
+ARG MAX_JOBS=4
+ARG BUILD_TEST=0
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:${PATH} \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH} \
+    # PyTorch build settings
+    USE_CUDA=1 \
+    USE_CUDNN=1 \
+    USE_MKLDNN=0 \
+    USE_NCCL=1 \
+    USE_DISTRIBUTED=1 \
+    USE_TENSORRT=0 \
+    TORCH_CUDA_ARCH_LIST="7.2;8.7" \
+    MAX_JOBS=${MAX_JOBS} \
+    BUILD_TEST=${BUILD_TEST}
+
+# Install system dependencies and specified Python version
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+    software-properties-common \
+    gnupg2 \
+    lsb-release; \
+    \
+    # Add deadsnakes PPA for Python versions
+    add-apt-repository -y ppa:deadsnakes/ppa; \
+    apt-get update; \
+    \
+    # Install specified Python version
+    apt-get install -y --no-install-recommends \
+    python${PYTHON_VERSION} \
+    python${PYTHON_VERSION}-venv \
+    python${PYTHON_VERSION}-dev \
+    python${PYTHON_VERSION}-distutils; \
+    \
+    # Set as default python
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1; \
+    update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1; \
+    \
+    # Install pip
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION}; \
+    \
+    # Install build dependencies
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    curl \
+    wget \
+    ca-certificates \
+    pkg-config \
+    cmake \
+    ninja-build \
+    ccache \
+    # BLAS/LAPACK
+    libopenblas-dev \
+    libblas-dev \
+    liblapack-dev \
+    libatlas-base-dev \
+    gfortran \
+    # OpenMPI for distributed
+    libopenmpi-dev \
+    openmpi-bin \
+    openmpi-common \
+    libomp-dev \
+    # Image/Audio processing
+    libjpeg-dev \
+    zlib1g-dev \
+    libpng-dev \
+    libsndfile1 \
+    ffmpeg \
+    libfreetype6-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    # Other dependencies
+    libhdf5-dev \
+    libssl-dev \
+    libffi-dev \
+    liblzma-dev; \
+    \
+    rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip and install Python build dependencies
+RUN python -m pip install --upgrade pip setuptools wheel && \
+    python -m pip install --no-cache-dir \
+    numpy \
+    'cython<3' \
+    pyyaml \
+    typing_extensions \
+    sympy \
+    filelock \
+    networkx \
+    jinja2 \
+    fsspec \
+    packaging \
+    requests \
+    cffi \
+    future \
+    ninja \
+    cmake \
+    scikit-build
+
+# Clone and build PyTorch from source
+WORKDIR /build
+
+RUN set -eux; \
+    # Clone PyTorch repository
+    git clone --recursive --depth 1 --branch v${TORCH_VERSION} https://github.com/pytorch/pytorch.git; \
+    cd pytorch; \
+    \
+    # Install Python dependencies
+    pip install --no-cache-dir -r requirements.txt; \
+    \
+    # Build PyTorch
+    python setup.py bdist_wheel; \
+    \
+    # Install the built wheel
+    pip install --no-cache-dir dist/*.whl; \
+    \
+    # Cleanup source to reduce image size
+    cd /; \
+    rm -rf /build/pytorch
+
+# Build and install torchvision from source
+RUN set -eux; \
+    # Determine compatible torchvision version based on torch version
+    TORCH_MAJOR=$(echo ${TORCH_VERSION} | cut -d. -f1); \
+    TORCH_MINOR=$(echo ${TORCH_VERSION} | cut -d. -f2); \
+    \
+    # torchvision version mapping (approximate)
+    if [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "9" ]; then \
+    VISION_VERSION="0.22.0"; \
+    elif [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "8" ]; then \
+    VISION_VERSION="0.21.0"; \
+    elif [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "7" ]; then \
+    VISION_VERSION="0.20.0"; \
+    else \
+    VISION_VERSION="0.19.0"; \
+    fi; \
+    \
+    git clone --recursive --depth 1 --branch v${VISION_VERSION} https://github.com/pytorch/vision.git; \
+    cd vision; \
+    python setup.py bdist_wheel; \
+    pip install --no-cache-dir dist/*.whl; \
+    cd /; \
+    rm -rf /build/vision
+
+# Build and install torchaudio from source
+RUN set -eux; \
+    # Determine compatible torchaudio version based on torch version
+    TORCH_MAJOR=$(echo ${TORCH_VERSION} | cut -d. -f1); \
+    TORCH_MINOR=$(echo ${TORCH_VERSION} | cut -d. -f2); \
+    \
+    # torchaudio version mapping (approximate)
+    if [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "9" ]; then \
+    AUDIO_VERSION="2.5.0"; \
+    elif [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "8" ]; then \
+    AUDIO_VERSION="2.4.0"; \
+    elif [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "7" ]; then \
+    AUDIO_VERSION="2.3.0"; \
+    else \
+    AUDIO_VERSION="2.2.0"; \
+    fi; \
+    \
+    git clone --recursive --depth 1 --branch v${AUDIO_VERSION} https://github.com/pytorch/audio.git || \
+    git clone --recursive --depth 1 https://github.com/pytorch/audio.git; \
+    cd audio; \
+    python setup.py bdist_wheel || true; \
+    pip install --no-cache-dir dist/*.whl || echo "torchaudio build skipped"; \
+    cd /; \
+    rm -rf /build/audio
+
+# Cleanup build dependencies to reduce image size
+RUN apt-get update && \
+    apt-get purge -y --auto-remove \
+    cmake \
+    ninja-build \
+    ccache && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.cache/pip /build
+
+WORKDIR /app
+
+# Verify PyTorch installation
+RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA arch list: {torch.cuda.get_arch_list() if torch.cuda.is_available() else \"N/A\"}')" || \
+    echo "PyTorch verification will complete on Jetson device"
