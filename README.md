@@ -136,53 +136,55 @@ Each image includes:
 
 ## Jetson Support (ARM64)
 
-This project also supports NVIDIA Jetson Orin devices with ARM64 architecture (JetPack 6.x).
+This project supports NVIDIA Jetson Orin devices with ARM64 architecture (JetPack 6.x).
+
+### JetPack 6.0 Specifications
+
+- **L4T Version**: R36.2.0
+- **Ubuntu**: 22.04
+- **CUDA**: 12.2 (bundled with L4T base image)
+- **Python**: Via Miniforge (prebuilt ARM64)
+- **PyTorch**: Official ARM64 prebuilt wheels
 
 ### Available Jetson Images
 
-Tags use the **same format as x86 images** for consistency:
-
-| Tag                     | PyTorch | CUDA | Python |
-| ----------------------- | ------- | ---- | ------ |
-| `2.7.1-cuda12.8-py3.11` | 2.7.1   | 12.8 | 3.11   |
-| `2.7.1-cuda12.8-py3.12` | 2.7.1   | 12.8 | 3.12   |
-| `2.8.0-cuda12.8-py3.11` | 2.8.0   | 12.8 | 3.11   |
-| `2.8.0-cuda12.8-py3.12` | 2.8.0   | 12.8 | 3.12   |
-| `2.9.0-cuda12.8-py3.11` | 2.9.0   | 12.8 | 3.11   |
-| `2.9.0-cuda12.8-py3.12` | 2.9.0   | 12.8 | 3.12   |
-| `2.9.0-cuda13.0-py3.11` | 2.9.0   | 13.0 | 3.11   |
-| `2.9.0-cuda13.0-py3.12` | 2.9.0   | 13.0 | 3.12   |
+| Tag                  | PyTorch | JetPack | Python |
+| -------------------- | ------- | ------- | ------ |
+| `2.7.1-jp6.0-py3.11` | 2.7.1   | 6.0     | 3.11   |
+| `2.7.1-jp6.0-py3.12` | 2.7.1   | 6.0     | 3.12   |
+| `2.8.0-jp6.0-py3.11` | 2.8.0   | 6.0     | 3.11   |
+| `2.8.0-jp6.0-py3.12` | 2.8.0   | 6.0     | 3.12   |
+| `2.9.0-jp6.0-py3.11` | 2.9.0   | 6.0     | 3.11   |
+| `2.9.0-jp6.0-py3.12` | 2.9.0   | 6.0     | 3.12   |
 
 ### Pull Jetson Images
 
 ```bash
 # From Docker Hub
-docker pull sky1218/pytorch-jetson:2.9.0-cuda13.0-py3.12
+docker pull sky1218/pytorch-jetson:2.9.0-jp6.0-py3.12
 
 # From GitHub Container Registry
-docker pull ghcr.io/911218sky/pytorch-jetson:2.9.0-cuda13.0-py3.12
+docker pull ghcr.io/911218sky/pytorch-jetson:2.9.0-jp6.0-py3.12
 ```
 
 ### Run on Jetson
 
 ```bash
 # Run with GPU support on Jetson
-docker run --runtime nvidia -it sky1218/pytorch-jetson:2.9.0-cuda13.0-py3.12
+docker run --runtime nvidia -it sky1218/pytorch-jetson:2.9.0-jp6.0-py3.12
 
 # Mount your code
-docker run --runtime nvidia -v $(pwd):/app -it sky1218/pytorch-jetson:2.9.0-cuda13.0-py3.12
+docker run --runtime nvidia -v $(pwd):/app -it sky1218/pytorch-jetson:2.9.0-jp6.0-py3.12
 ```
 
 ### Trigger Jetson Builds
 
-Uses the **same version format as x86**:
-
 ```bash
-# Build single version (same format as x86)
-./trigger-build-jetson.sh 2.9.0-cuda13.0-py3.12
+# Build single version
+./trigger-build-jetson.sh 2.9.0-jp6.0-py3.12
 
 # Build multiple versions
-./trigger-build-jetson.sh 2.9.0-cuda12.8-py3.11 2.8.0-cuda12.8-py3.12
+./trigger-build-jetson.sh 2.9.0-jp6.0-py3.11 2.8.0-jp6.0-py3.12
 
 # Build from JSON file
 ./trigger-build-jetson.sh -f versions-jetson.jsonc
@@ -198,30 +200,24 @@ Uses the **same version format as x86**:
 
 Build locally for Jetson (requires ARM64 or QEMU).
 
-> ⚠️ **Note**: Jetson images are built **from source** since official pre-built ARM64 wheels for PyTorch 2.7+ are not available. Build time can be **several hours**.
-
 ```bash
 # Using docker buildx for cross-platform build
 docker buildx build \
   --platform linux/arm64 \
-  --build-arg L4T_VERSION=r36.4.0 \
+  --build-arg L4T_VERSION=r36.2.0 \
   --build-arg TORCH_VERSION=2.9.0 \
-  --build-arg CUDA_VERSION=12.8 \
   --build-arg PYTHON_VERSION=3.12 \
-  --build-arg MAX_JOBS=4 \
   -f Dockerfile.jetson.template \
-  -t sky1218/pytorch-jetson:2.9.0-cuda13.0-py3.12 .
+  -t sky1218/pytorch-jetson:2.9.0-jp6.0-py3.12 .
 ```
 
 #### Build Arguments
 
-| Argument         | Description                                 | Default   |
-| ---------------- | ------------------------------------------- | --------- |
-| `L4T_VERSION`    | L4T base image version                      | `r36.4.0` |
-| `TORCH_VERSION`  | PyTorch version to build                    | `2.9.0`   |
-| `CUDA_VERSION`   | CUDA version                                | `12.8`    |
-| `PYTHON_VERSION` | Python version                              | `3.11`    |
-| `MAX_JOBS`       | Parallel compile jobs (lower = less memory) | `4`       |
+| Argument         | Description            | Default   |
+| ---------------- | ---------------------- | --------- |
+| `L4T_VERSION`    | L4T base image version | `r36.2.0` |
+| `TORCH_VERSION`  | PyTorch version        | `2.9.0`   |
+| `PYTHON_VERSION` | Python version         | `3.11`    |
 
 ## Links
 

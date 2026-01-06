@@ -1,4 +1,4 @@
-name: Build Jetson PyTorch Docker Images (From Source)
+name: Build Jetson PyTorch Docker Images
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       versions:
         description: "Version matrix JSON"
         required: true
-        default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"12.2","python":"3.11"}]'
+        default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","python":"3.11"}]'
         type: string
 
 env:
@@ -67,20 +67,17 @@ jobs:
           L4T_VERSION="${{ matrix.version.l4t }}"
           JETPACK_VERSION="${{ matrix.version.jetpack }}"
           TORCH_VERSION="${{ matrix.version.torch }}"
-          CUDA_VERSION="${{ matrix.version.cuda }}"
           PYTHON_VERSION="${{ matrix.version.python }}"
 
           # Create tag: torch-jp[jetpack]-py[python]
           TAG="${TORCH_VERSION}-jp${JETPACK_VERSION}-py${PYTHON_VERSION}"
 
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Building Jetson image from source: $TAG"
+          echo "Building Jetson image: $TAG"
           echo "  L4T: $L4T_VERSION"
-          echo "  JetPack: $JETPACK_VERSION"
-          echo "  PyTorch: $TORCH_VERSION (building from source)"
-          echo "  CUDA: $CUDA_VERSION"
-          echo "  Python: $PYTHON_VERSION (building from source)"
-          echo "  Using all available CPU cores for compilation"
+          echo "  JetPack: $JETPACK_VERSION (CUDA 12.2 bundled)"
+          echo "  PyTorch: $TORCH_VERSION"
+          echo "  Python: $PYTHON_VERSION (via Miniforge)"
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -95,9 +92,7 @@ jobs:
           build-args: |
             L4T_VERSION=${{ matrix.version.l4t }}
             TORCH_VERSION=${{ matrix.version.torch }}
-            CUDA_VERSION=${{ matrix.version.cuda }}
             PYTHON_VERSION=${{ matrix.version.python }}
-            BUILD_TEST=0
           cache-from: type=gha
           cache-to: type=gha,mode=max
           no-cache: false
