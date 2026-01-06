@@ -1,18 +1,19 @@
-# Jetson PyTorch Docker Image Template
-# JetPack 6.x only (L4T R36.x) - ARM64 architecture
+# =============================================================================
+# Jetson PyTorch Docker Image Template (Standalone, same as template)
+# =============================================================================
+# This file is identical to Dockerfile.jetson.template
+# It exists for backward compatibility and local builds
 #
-# Build Strategy:
-# 1. Try own GitHub releases (cached wheels)
-# 2. Try Jetson AI Lab PyPI (https://pypi.jetson-ai-lab.dev)
-# 3. Build from source if both fail
-#
-# Adapted from: https://github.com/dusty-nv/jetson-containers
+# For the latest version, see: Dockerfile.jetson.template
+# =============================================================================
 
+# =============================================================================
+# Stage 1: Build Stage
+# =============================================================================
 ARG L4T_VERSION=r36.2.0
 ARG PYTHON_VERSION=3.11
 
-# Use NVIDIA L4T base image (includes CUDA)
-FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
+FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION} AS builder
 
 ARG TORCH_VERSION=2.7.0
 ARG PYTHON_VERSION=3.11
@@ -20,7 +21,6 @@ ARG MAX_JOBS=4
 ARG GITHUB_OWNER=911218sky
 ARG GITHUB_REPO=pytorch-docker-build
 
-# Build configuration
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -33,7 +33,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GITHUB_OWNER=${GITHUB_OWNER} \
     GITHUB_REPO=${GITHUB_REPO}
 
-# Install system dependencies
+# Install system dependencies (including build tools)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
@@ -45,23 +45,19 @@ RUN apt-get update && \
     ca-certificates \
     pkg-config \
     software-properties-common \
-    # OpenBLAS for ARM
     libopenblas-dev \
     libomp-dev \
-    # For torchvision
     libjpeg-dev \
     libpng-dev \
-    # For torchaudio
     libsndfile1-dev \
     ffmpeg \
-    # Python
     python3 \
     python3-pip \
     python3-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Miniforge for custom Python version
+# Install Miniforge
 ENV CONDA_DIR=/opt/conda
 ENV PATH=${CONDA_DIR}/bin:${PATH}
 
@@ -72,14 +68,12 @@ RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Mi
     conda clean -afy && \
     rm -rf /opt/conda/pkgs/*
 
-# Activate conda environment
 ENV PATH=${CONDA_DIR}/envs/pytorch/bin:${PATH}
 ENV CONDA_DEFAULT_ENV=pytorch
 
-# Upgrade GCC on Ubuntu 22.04 for GLIBCXX_3.4.32 support (needed for source builds)
+# Upgrade GCC on Ubuntu 22.04
 RUN UBUNTU_VERSION=$(grep VERSION_ID /etc/os-release | cut -d '"' -f 2) && \
     if [ "$UBUNTU_VERSION" = "22.04" ]; then \
-    echo "Ubuntu 22.04 detected - installing GCC 13" && \
     add-apt-repository ppa:ubuntu-toolchain-r/test -y && \
     apt-get update && \
     apt-get install -y g++-13 libstdc++-13-dev libstdc++6 && \
@@ -88,41 +82,55 @@ RUN UBUNTU_VERSION=$(grep VERSION_ID /etc/os-release | cut -d '"' -f 2) && \
     rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Copy build scripts
 COPY scripts/pytorch/ /tmp/pytorch/
 RUN chmod +x /tmp/pytorch/*.sh
 
-# Install Python build requirements (needed for source builds)
 RUN pip install --no-cache-dir \
-    setuptools>=70.1.0 \
-    wheel \
-    ninja \
-    numpy \
-    packaging \
-    pyyaml \
-    typing-extensions>=4.10.0 \
-    scikit-build \
-    sympy \
-    filelock \
-    networkx \
-    jinja2 \
-    fsspec
+    setuptools>=70.1.0 wheel ninja numpy packaging pyyaml \
+    typing-extensions>=4.10.0 scikit-build sympy filelock networkx jinja2 fsspec pillow
 
-# Install PyTorch (tries PyPI first, falls back to source build)
 RUN /tmp/pytorch/install.sh
+RUN /tmp/pytorch/build-torchvision.sh || echo "torchvision failed"
+RUN /tmp/pytorch/build-torchaudio.sh || echo "torchaudio failed"
 
-# Install torchvision
-RUN /tmp/pytorch/build-torchvision.sh || echo "torchvision install failed, continuing..."
+RUN echo "=== Wheels ===" && ls -la /wheels/ || true
 
-# Install torchaudio
-RUN /tmp/pytorch/build-torchaudio.sh || echo "torchaudio install failed, continuing..."
+# =============================================================================
+# Stage 2: Runtime Stage
+# =============================================================================
+ARG L4T_VERSION
+ARG PYTHON_VERSION
 
-# Cleanup
-RUN rm -rf /tmp/pytorch /root/.cache /opt/*.whl
+FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
+
+ARG PYTHON_VERSION=3.11
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:${PATH} \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git wget curl ca-certificates \
+    libopenblas0 libomp5 libgomp1 \
+    libjpeg62-turbo libpng16-16 \
+    libsndfile1 ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV CONDA_DIR=/opt/conda
+COPY --from=builder ${CONDA_DIR} ${CONDA_DIR}
+ENV PATH=${CONDA_DIR}/envs/pytorch/bin:${CONDA_DIR}/bin:${PATH}
+ENV CONDA_DEFAULT_ENV=pytorch
+
+COPY --from=builder /usr/lib/aarch64-linux-gnu/libstdc++.so.6* /usr/lib/aarch64-linux-gnu/
+COPY --from=builder /wheels /wheels
 
 WORKDIR /app
 
-# Verify installation
-RUN python3 -c "import torch; print(f'Python: {__import__(\"sys\").version}'); print(f'PyTorch {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}')" && \
+RUN python3 -c "import torch; print(f'PyTorch {torch.__version__}')" && \
     python3 -c "import torchvision; print(f'torchvision {torchvision.__version__}')" || true && \
     python3 -c "import torchaudio; print(f'torchaudio {torchaudio.__version__}')" || true

@@ -1,9 +1,10 @@
+# =============================================================================
+# Stage 1: Build from source using CUDA devel image
+# =============================================================================
 ARG CUDA_BASE_VERSION=12.8.0
 ARG UBUNTU_VERSION=22.04
 
-# Use NVIDIA CUDA development image for building from source
-# CUDA 13.x requires Ubuntu 24.04
-FROM nvidia/cuda:${CUDA_BASE_VERSION}-devel-ubuntu${UBUNTU_VERSION}
+FROM nvidia/cuda:${CUDA_BASE_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder
 
 ARG TORCH_VERSION=2.8.0
 ARG CUDA_VERSION=12.8
@@ -16,18 +17,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Install Python and build dependencies
-RUN set -eux; \
-    apt-get update; \
+# Install system build dependencies
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    software-properties-common; \
-    add-apt-repository -y ppa:deadsnakes/ppa; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-    python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-dev \
-    python${PYTHON_VERSION}-venv \
-    python${PYTHON_VERSION}-distutils \
     build-essential \
     git \
     curl \
@@ -42,19 +34,26 @@ RUN set -eux; \
     cmake \
     ninja-build \
     libopenblas-dev \
-    libomp-dev; \
-    \
-    # Set python3 to use the specified version
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1; \
-    update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1; \
-    \
-    # Install pip
-    curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION}; \
-    \
-    apt-get clean; \
+    libomp-dev && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install build dependencies
+# Install Miniforge (conda) for Python
+ENV CONDA_DIR=/opt/conda
+ENV PATH=${CONDA_DIR}/bin:${PATH}
+
+RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O /tmp/miniforge.sh && \
+    bash /tmp/miniforge.sh -b -p ${CONDA_DIR} && \
+    rm /tmp/miniforge.sh && \
+    conda create -n pytorch python=${PYTHON_VERSION} numpy -y && \
+    conda clean -afy && \
+    rm -rf ${CONDA_DIR}/pkgs/*
+
+# Activate conda environment
+ENV PATH=${CONDA_DIR}/envs/pytorch/bin:${PATH}
+ENV CONDA_DEFAULT_ENV=pytorch
+
+# Install Python build dependencies
 RUN pip install --no-cache-dir \
     setuptools \
     wheel \
@@ -94,15 +93,58 @@ RUN /tmp/pytorch/build-torchvision.sh
 # Build torchaudio from source (wheel saved to /wheels)
 RUN /tmp/pytorch/build-torchaudio.sh
 
-# Clean up build artifacts to reduce image size (keep /wheels for export)
-RUN apt-get purge -y --auto-remove \
-    cmake \
-    ninja-build \
-    software-properties-common; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.cache/pip
-
 # Verify all wheels are present
 RUN echo "=== Wheels built ===" && ls -la /wheels/
+
+# =============================================================================
+# Stage 2: Create smaller runtime image using CUDA runtime
+# =============================================================================
+ARG CUDA_BASE_VERSION
+ARG UBUNTU_VERSION
+
+FROM nvidia/cuda:${CUDA_BASE_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
+
+ARG PYTHON_VERSION=3.11
+
+# non-interactive
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Install runtime dependencies only
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    wget \
+    ca-certificates \
+    libjpeg-turbo8 \
+    zlib1g \
+    libpng16-16 \
+    libsndfile1 \
+    ffmpeg \
+    libopenblas0 \
+    libomp5 \
+    libgomp1 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy conda from builder
+ENV CONDA_DIR=/opt/conda
+COPY --from=builder ${CONDA_DIR} ${CONDA_DIR}
+ENV PATH=${CONDA_DIR}/envs/pytorch/bin:${CONDA_DIR}/bin:${PATH}
+ENV CONDA_DEFAULT_ENV=pytorch
+
+# Copy wheels from builder stage
+COPY --from=builder /wheels /wheels
+
+# Install the built wheels
+RUN pip install --no-cache-dir /wheels/*.whl && \
+    rm -rf /root/.cache/pip
+
+# Verify installation
+RUN python3 -c "import torch; print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')" && \
+    python3 -c "import torchvision; print(f'torchvision {torchvision.__version__}')" && \
+    python3 -c "import torchaudio; print(f'torchaudio {torchaudio.__version__}')"
 
 WORKDIR /app

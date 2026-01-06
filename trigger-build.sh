@@ -10,22 +10,31 @@ show_help() {
     cat << EOF
 Usage: ./trigger-build.sh [OPTIONS] [VERSIONS...]
 
-Trigger GitHub Actions to build multiple PyTorch Docker images in parallel.
+Trigger GitHub Actions to build PyTorch Docker images.
 
 OPTIONS:
-    -h, --help      Show this help message
-    -f, --file      Read versions from a JSON file
+    -h, --help          Show this help message
+    -f, --file          Read versions from a JSON file
+    -s, --source        Build from source code (slower, custom CUDA arch)
+    -a, --arch LIST     CUDA architectures (default: 8.0;8.6;8.9;9.0;10.0+PTX)
+    -j, --jobs N        Max parallel compile jobs (default: 4)
 
 VERSION FORMAT:
     TORCH-cudaCUDA-pyPYTHON
-    Example: 2.8.0-cuda12.9-py3.11
+    Example: 2.8.0-cuda12.8-py3.11
 
 EXAMPLES:
-    # Build single version
-    ./trigger-build.sh 2.8.0-cuda12.9-py3.11
+    # Build single version (pre-compiled wheel, fast)
+    ./trigger-build.sh 2.9.0-cuda12.8-py3.12
+
+    # Build from source (for RTX 5090 support)
+    ./trigger-build.sh -s 2.9.0-cuda13.0-py3.12
+
+    # Build from source with custom CUDA architectures
+    ./trigger-build.sh -s -a "8.9;9.0;10.0+PTX" 2.9.0-cuda13.0-py3.12
 
     # Build multiple versions (parallel)
-    ./trigger-build.sh 2.8.0-cuda12.9-py3.11 2.7.1-cuda12.8-py3.12 2.5.1-cuda12.4-py3.11
+    ./trigger-build.sh 2.9.0-cuda12.8-py3.11 2.8.0-cuda12.8-py3.12
 
     # Build from JSON file
     ./trigger-build.sh -f versions.json
@@ -54,28 +63,31 @@ fi
 # Parse version string like "2.8.0-cuda12.9-py3.11" into JSON
 parse_version() {
     local ver="$1"
-    # Extract parts using regex
     if [[ "$ver" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-cuda([0-9]+\.[0-9]+)-py([0-9]+\.[0-9]+)$ ]]; then
         echo "{\"torch\":\"${BASH_REMATCH[1]}\",\"cuda\":\"${BASH_REMATCH[2]}\",\"python\":\"${BASH_REMATCH[3]}\"}"
     else
         echo "Error: Invalid version format: $ver" >&2
-        echo "Expected format: TORCH-cudaCUDA-pyPYTHON (e.g., 2.8.0-cuda12.9-py3.11)" >&2
+        echo "Expected format: TORCH-cudaCUDA-pyPYTHON (e.g., 2.8.0-cuda12.8-py3.11)" >&2
         return 1
     fi
 }
 
-# Default versions to build
+# Default versions
 DEFAULT_VERSIONS='[
-  {"torch":"2.8.0","cuda":"12.9","python":"3.12"},
-  {"torch":"2.8.0","cuda":"12.9","python":"3.11"},
+  {"torch":"2.9.0","cuda":"12.8","python":"3.12"},
+  {"torch":"2.9.0","cuda":"12.8","python":"3.11"},
+  {"torch":"2.8.0","cuda":"12.8","python":"3.12"},
+  {"torch":"2.8.0","cuda":"12.8","python":"3.11"},
   {"torch":"2.7.1","cuda":"12.8","python":"3.12"},
-  {"torch":"2.6.0","cuda":"12.6","python":"3.11"},
-  {"torch":"2.5.1","cuda":"12.4","python":"3.11"}
+  {"torch":"2.7.1","cuda":"12.8","python":"3.11"}
 ]'
 
 # Parse arguments
 VERSIONS=""
 USE_FILE=""
+BUILD_FROM_SOURCE="false"
+CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;10.0+PTX"
+MAX_JOBS="4"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -86,8 +98,19 @@ while [[ $# -gt 0 ]]; do
             USE_FILE="$2"
             shift 2
             ;;
+        -s|--source)
+            BUILD_FROM_SOURCE="true"
+            shift
+            ;;
+        -a|--arch)
+            CUDA_ARCH_LIST="$2"
+            shift 2
+            ;;
+        -j|--jobs)
+            MAX_JOBS="$2"
+            shift 2
+            ;;
         *)
-            # Parse version strings
             if [[ -z "$VERSIONS" ]]; then
                 VERSIONS="[$(parse_version "$1")"
             else
@@ -111,7 +134,7 @@ else
     VERSIONS="$DEFAULT_VERSIONS"
 fi
 
-# Compact JSON (remove newlines)
+# Compact JSON
 VERSIONS_COMPACT=$(echo "$VERSIONS" | jq -c '.')
 VERSION_COUNT=$(echo "$VERSIONS" | jq 'length')
 
@@ -119,16 +142,32 @@ echo "=========================================="
 echo "  PyTorch Docker Build Trigger"
 echo "=========================================="
 echo
-echo "Building $VERSION_COUNT image(s) in parallel:"
+echo "Building $VERSION_COUNT image(s):"
 echo "$VERSIONS" | jq -r '.[] | "  - \(.torch)-cuda\(.cuda)-py\(.python)"'
+echo
+echo "Build from source: $BUILD_FROM_SOURCE"
+if [[ "$BUILD_FROM_SOURCE" == "true" ]]; then
+    echo "CUDA architectures: $CUDA_ARCH_LIST"
+    echo "Max jobs: $MAX_JOBS"
+fi
 echo
 
 # Trigger the workflow
-gh workflow run "$WORKFLOW_FILE" \
-    --repo "$OWNER/$REPO" \
-    -f versions="$VERSIONS_COMPACT"
+if [[ "$BUILD_FROM_SOURCE" == "true" ]]; then
+    gh workflow run "$WORKFLOW_FILE" \
+        --repo "$OWNER/$REPO" \
+        -f versions="$VERSIONS_COMPACT" \
+        -f build_from_source=true \
+        -f cuda_arch_list="$CUDA_ARCH_LIST" \
+        -f max_jobs="$MAX_JOBS"
+else
+    gh workflow run "$WORKFLOW_FILE" \
+        --repo "$OWNER/$REPO" \
+        -f versions="$VERSIONS_COMPACT" \
+        -f build_from_source=false
+fi
 
-echo "Workflow triggered successfully!"
+echo "✓ Workflow triggered successfully!"
 echo
 echo "View progress: https://github.com/$OWNER/$REPO/actions"
 echo "Docker Hub:    https://hub.docker.com/r/sky1218/pytorch/tags"

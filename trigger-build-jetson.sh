@@ -10,7 +10,7 @@ show_help() {
     cat << EOF
 Usage: ./trigger-build-jetson.sh [OPTIONS] [VERSIONS...]
 
-Trigger GitHub Actions to build Jetson PyTorch Docker images (from source).
+Trigger GitHub Actions to build Jetson PyTorch Docker images.
 
 OPTIONS:
     -h, --help      Show this help message
@@ -18,14 +18,14 @@ OPTIONS:
 
 VERSION FORMAT:
     TORCH-jpJETPACK-pyPYTHON
-    Example: 2.7.0-jp6.0-py3.11
+    Example: 2.7.1-jp6.0-py3.11
 
 EXAMPLES:
     # Build single version
-    ./trigger-build-jetson.sh 2.7.0-jp6.0-py3.11
+    ./trigger-build-jetson.sh 2.7.1-jp6.0-py3.11
 
-    # Build multiple versions (parallel)
-    ./trigger-build-jetson.sh 2.7.0-jp6.0-py3.11 2.7.0-jp6.0-py3.12
+    # Build multiple versions
+    ./trigger-build-jetson.sh 2.7.1-jp6.0-py3.11 2.7.1-jp6.0-py3.12
 
     # Build from JSON file
     ./trigger-build-jetson.sh -f versions-jetson.jsonc
@@ -33,7 +33,8 @@ EXAMPLES:
     # Build all default versions
     ./trigger-build-jetson.sh
 
-NOTE: Each build takes 2-4 hours due to source compilation with QEMU.
+NOTE: Each build takes 2-4 hours (ARM64 native runner).
+      Wheels are automatically uploaded to GitHub Releases.
 
 EOF
     exit 0
@@ -63,7 +64,7 @@ get_l4t_version() {
     esac
 }
 
-# Parse version string like "2.7.0-jp6.0-py3.11" into JSON
+# Parse version string like "2.7.1-jp6.0-py3.11" into JSON
 parse_version() {
     local ver="$1"
     if [[ "$ver" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-jp([0-9]+\.[0-9]+)-py([0-9]+\.[0-9]+)$ ]]; then
@@ -74,15 +75,17 @@ parse_version() {
         echo "{\"l4t\":\"$l4t\",\"jetpack\":\"$jetpack\",\"torch\":\"$torch\",\"python\":\"$python\"}"
     else
         echo "Error: Invalid version format: $ver" >&2
-        echo "Expected format: TORCH-jpJETPACK-pyPYTHON (e.g., 2.7.0-jp6.0-py3.11)" >&2
+        echo "Expected format: TORCH-jpJETPACK-pyPYTHON (e.g., 2.7.1-jp6.0-py3.11)" >&2
         return 1
     fi
 }
 
 # Default versions
 DEFAULT_VERSIONS='[
-  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.0","python":"3.11"},
-  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.0","python":"3.12"}
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.1","python":"3.11"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.1","python":"3.12"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.8.0","python":"3.11"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","python":"3.11"}
 ]'
 
 # Parse arguments
@@ -127,14 +130,14 @@ VERSIONS_COMPACT=$(echo "$VERSIONS" | jq -c '.')
 VERSION_COUNT=$(echo "$VERSIONS" | jq 'length')
 
 echo "==========================================="
-echo "  Jetson PyTorch Docker Build (From Source)"
-echo "  Using: dusty-nv/jetson-containers scripts"
+echo "  Jetson PyTorch Docker Build"
 echo "==========================================="
 echo
 echo "Building $VERSION_COUNT Jetson image(s):"
 echo "$VERSIONS" | jq -r '.[] | "  - PyTorch \(.torch)-jp\(.jetpack)-py\(.python)"'
 echo
-echo "⚠️  Each build takes 2-4 hours (QEMU ARM64 emulation)"
+echo "⏱️  Build time: ~2-4 hours per image (ARM64 native)"
+echo "📦 Wheels will be uploaded to GitHub Releases"
 echo
 
 # Trigger the workflow
@@ -142,7 +145,8 @@ gh workflow run "$WORKFLOW_FILE" \
     --repo "$OWNER/$REPO" \
     -f versions="$VERSIONS_COMPACT"
 
-echo "Workflow triggered successfully!"
+echo "✓ Workflow triggered successfully!"
 echo
 echo "View progress: https://github.com/$OWNER/$REPO/actions"
 echo "Docker Hub:    https://hub.docker.com/r/sky1218/pytorch-jetson/tags"
+echo "Releases:      https://github.com/$OWNER/$REPO/releases"

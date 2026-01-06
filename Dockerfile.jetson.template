@@ -1,18 +1,23 @@
+# =============================================================================
 # Jetson PyTorch Docker Image Template
 # JetPack 6.x only (L4T R36.x) - ARM64 architecture
 #
 # Build Strategy:
-# 1. Try own GitHub releases (cached wheels)
-# 2. Try Jetson AI Lab PyPI (https://pypi.jetson-ai-lab.dev)
-# 3. Build from source if both fail
+# 1. Try GitHub releases (cached wheels) - fastest
+# 2. Build from source if not found
+#
+# Multi-stage build: Build stage -> Runtime stage (smaller final image)
 #
 # Adapted from: https://github.com/dusty-nv/jetson-containers
+# =============================================================================
 
+# =============================================================================
+# Stage 1: Build Stage - Install build tools and compile
+# =============================================================================
 ARG L4T_VERSION=r36.2.0
 ARG PYTHON_VERSION=3.11
 
-# Use NVIDIA L4T base image (includes CUDA)
-FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
+FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION} AS builder
 
 ARG TORCH_VERSION=2.7.0
 ARG PYTHON_VERSION=3.11
@@ -33,7 +38,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GITHUB_OWNER=${GITHUB_OWNER} \
     GITHUB_REPO=${GITHUB_REPO}
 
-# Install system dependencies
+# Install system dependencies (including build tools)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
@@ -76,7 +81,7 @@ RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Mi
 ENV PATH=${CONDA_DIR}/envs/pytorch/bin:${PATH}
 ENV CONDA_DEFAULT_ENV=pytorch
 
-# Upgrade GCC on Ubuntu 22.04 for GLIBCXX_3.4.32 support (needed for source builds)
+# Upgrade GCC on Ubuntu 22.04 for GLIBCXX_3.4.32 support
 RUN UBUNTU_VERSION=$(grep VERSION_ID /etc/os-release | cut -d '"' -f 2) && \
     if [ "$UBUNTU_VERSION" = "22.04" ]; then \
     echo "Ubuntu 22.04 detected - installing GCC 13" && \
@@ -92,7 +97,7 @@ RUN UBUNTU_VERSION=$(grep VERSION_ID /etc/os-release | cut -d '"' -f 2) && \
 COPY scripts/pytorch/ /tmp/pytorch/
 RUN chmod +x /tmp/pytorch/*.sh
 
-# Install Python build requirements (needed for source builds)
+# Install Python build requirements
 RUN pip install --no-cache-dir \
     setuptools>=70.1.0 \
     wheel \
@@ -106,9 +111,10 @@ RUN pip install --no-cache-dir \
     filelock \
     networkx \
     jinja2 \
-    fsspec
+    fsspec \
+    pillow
 
-# Install PyTorch (tries PyPI first, falls back to source build)
+# Install PyTorch (tries GitHub releases first, falls back to source build)
 RUN /tmp/pytorch/install.sh
 
 # Install torchvision
@@ -117,8 +123,58 @@ RUN /tmp/pytorch/build-torchvision.sh || echo "torchvision install failed, conti
 # Install torchaudio
 RUN /tmp/pytorch/build-torchaudio.sh || echo "torchaudio install failed, continuing..."
 
-# Cleanup
-RUN rm -rf /tmp/pytorch /root/.cache /opt/*.whl
+# Verify wheels are present
+RUN echo "=== Wheels in builder ===" && ls -la /wheels/ || echo "No wheels directory"
+
+# =============================================================================
+# Stage 2: Runtime Stage - Smaller final image
+# =============================================================================
+ARG L4T_VERSION
+ARG PYTHON_VERSION
+
+FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
+
+ARG PYTHON_VERSION=3.11
+
+# Runtime configuration
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:${PATH} \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+
+# Install runtime dependencies only (no build tools)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    wget \
+    curl \
+    ca-certificates \
+    # OpenBLAS runtime
+    libopenblas0 \
+    libomp5 \
+    libgomp1 \
+    # For torchvision
+    libjpeg62-turbo \
+    libpng16-16 \
+    # For torchaudio
+    libsndfile1 \
+    ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy conda from builder
+ENV CONDA_DIR=/opt/conda
+COPY --from=builder ${CONDA_DIR} ${CONDA_DIR}
+ENV PATH=${CONDA_DIR}/envs/pytorch/bin:${CONDA_DIR}/bin:${PATH}
+ENV CONDA_DEFAULT_ENV=pytorch
+
+# Copy libstdc++ if upgraded
+COPY --from=builder /usr/lib/aarch64-linux-gnu/libstdc++.so.6* /usr/lib/aarch64-linux-gnu/
+
+# Copy wheels for export
+COPY --from=builder /wheels /wheels
 
 WORKDIR /app
 
