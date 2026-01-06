@@ -15,7 +15,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm64
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 360 # 6 hours max
     permissions:
       contents: write # For uploading releases
