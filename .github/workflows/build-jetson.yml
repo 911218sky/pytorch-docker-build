@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       versions:
-        description: 'Version matrix JSON (e.g., [{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"12.2"}])'
+        description: "Version matrix JSON"
         required: true
-        default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"12.2"}]'
+        default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"12.2","python":"3.11"}]'
         type: string
       max_jobs:
         description: "Max parallel compile jobs (lower = less memory, slower)"
@@ -77,9 +77,10 @@ jobs:
           JETPACK_VERSION="${{ matrix.version.jetpack }}"
           TORCH_VERSION="${{ matrix.version.torch }}"
           CUDA_VERSION="${{ matrix.version.cuda }}"
+          PYTHON_VERSION="${{ matrix.version.python }}"
 
-          # Create tag: torch-jp[jetpack]-py3.10
-          TAG="${TORCH_VERSION}-jp${JETPACK_VERSION}"
+          # Create tag: torch-jp[jetpack]-py[python]
+          TAG="${TORCH_VERSION}-jp${JETPACK_VERSION}-py${PYTHON_VERSION}"
 
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "Building Jetson image from source: $TAG"
@@ -87,7 +88,7 @@ jobs:
           echo "  JetPack: $JETPACK_VERSION"
           echo "  PyTorch: $TORCH_VERSION (building from source)"
           echo "  CUDA: $CUDA_VERSION"
-          echo "  Python: 3.10 (system default)"
+          echo "  Python: $PYTHON_VERSION (building from source)"
           echo "  Max Jobs: ${{ inputs.max_jobs }}"
 
       - name: Build and push
@@ -104,6 +105,7 @@ jobs:
             L4T_VERSION=${{ matrix.version.l4t }}
             TORCH_VERSION=${{ matrix.version.torch }}
             CUDA_VERSION=${{ matrix.version.cuda }}
+            PYTHON_VERSION=${{ matrix.version.python }}
             MAX_JOBS=${{ inputs.max_jobs }}
             BUILD_TEST=0
           cache-from: type=gha

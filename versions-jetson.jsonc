@@ -2,16 +2,20 @@
 // l4t: Linux for Tegra version
 // jetpack: JetPack version
 // torch: PyTorch version
-// cuda: CUDA version (for reference, actual CUDA is from L4T)
+// cuda: CUDA version (from L4T base image)
+// python: Python version (built from source)
 //
 // JetPack 6.0 (L4T R36.2.0):
 // - Ubuntu 22.04
 // - CUDA 12.2
-// - Python 3.10 (system default, cannot change easily)
+// - Python: Built from source (3.11 or 3.12)
 //
-// Note: PyTorch is built from source for ARM64 architecture
+// Note: Both Python and PyTorch are built from source for ARM64
 [
-  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.7.1", "cuda": "12.2"},
-  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.8.0", "cuda": "12.2"},
-  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.9.0", "cuda": "12.2"}
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.7.1", "cuda": "12.2", "python": "3.11"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.7.1", "cuda": "12.2", "python": "3.12"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.8.0", "cuda": "12.2", "python": "3.11"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.8.0", "cuda": "12.2", "python": "3.12"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.9.0", "cuda": "12.2", "python": "3.11"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.9.0", "cuda": "12.2", "python": "3.12"}
 ]
