@@ -22,7 +22,6 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         version: ${{ fromJson(inputs.versions) }}
 
