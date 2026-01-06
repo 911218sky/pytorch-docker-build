@@ -1,15 +1,14 @@
 # Jetson PyTorch Dockerfile - Build from Source
 # JetPack 6.x only (L4T R36.x) - ARM64 architecture
 #
-# Builds PyTorch from source to support any version
+# Builds Python and PyTorch from source to support any version
 # WARNING: Build time can be several hours due to compilation
 #
 # Build example:
 #   docker buildx build --platform linux/arm64 \
 #     --build-arg TORCH_VERSION=2.9.0 \
-#     --build-arg CUDA_VERSION=12.8 \
 #     --build-arg PYTHON_VERSION=3.11 \
-#     -f Dockerfile.jetson -t pytorch-jetson:2.9.0 .
+#     -f Dockerfile.jetson -t pytorch-jetson:2.9.0-py3.11 .
 
 ARG L4T_VERSION=r36.2.0
 ARG PYTHON_VERSION=3.11
@@ -18,7 +17,7 @@ ARG PYTHON_VERSION=3.11
 FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
 
 ARG TORCH_VERSION=2.9.0
-ARG CUDA_VERSION=12.8
+ARG CUDA_VERSION=12.2
 ARG PYTHON_VERSION=3.11
 
 # Build configuration
@@ -42,33 +41,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     MAX_JOBS=${MAX_JOBS} \
     BUILD_TEST=${BUILD_TEST}
 
-# Install system dependencies and specified Python version
+# Install build dependencies for Python compilation
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends \
-    software-properties-common \
-    gnupg2 \
-    lsb-release; \
-    \
-    # Add deadsnakes PPA for Python versions
-    add-apt-repository -y ppa:deadsnakes/ppa; \
-    apt-get update; \
-    \
-    # Install specified Python version
-    apt-get install -y --no-install-recommends \
-    python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-venv \
-    python${PYTHON_VERSION}-dev \
-    python${PYTHON_VERSION}-distutils; \
-    \
-    # Set as default python
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1; \
-    update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1; \
-    \
-    # Install pip
-    curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION}; \
-    \
-    # Install build dependencies
     apt-get install -y --no-install-recommends \
     build-essential \
     git \
@@ -76,6 +51,19 @@ RUN set -eux; \
     wget \
     ca-certificates \
     pkg-config \
+    # Python build dependencies
+    zlib1g-dev \
+    libncurses5-dev \
+    libgdbm-dev \
+    libnss3-dev \
+    libssl-dev \
+    libreadline-dev \
+    libffi-dev \
+    libsqlite3-dev \
+    libbz2-dev \
+    liblzma-dev \
+    uuid-dev \
+    # Other build tools
     cmake \
     ninja-build \
     ccache \
@@ -92,7 +80,6 @@ RUN set -eux; \
     libomp-dev \
     # Image/Audio processing
     libjpeg-dev \
-    zlib1g-dev \
     libpng-dev \
     libsndfile1 \
     ffmpeg \
@@ -103,12 +90,55 @@ RUN set -eux; \
     libswscale-dev \
     libswresample-dev \
     # Other dependencies
-    libhdf5-dev \
-    libssl-dev \
-    libffi-dev \
-    liblzma-dev; \
-    \
+    libhdf5-dev; \
     rm -rf /var/lib/apt/lists/*
+
+# Build and install Python from source
+RUN set -eux; \
+    # Determine Python minor version for download
+    PYTHON_FULL_VERSION="${PYTHON_VERSION}.0"; \
+    if [ "${PYTHON_VERSION}" = "3.11" ]; then \
+    PYTHON_FULL_VERSION="3.11.9"; \
+    elif [ "${PYTHON_VERSION}" = "3.12" ]; then \
+    PYTHON_FULL_VERSION="3.12.4"; \
+    fi; \
+    \
+    cd /tmp; \
+    wget https://www.python.org/ftp/python/${PYTHON_FULL_VERSION}/Python-${PYTHON_FULL_VERSION}.tgz; \
+    tar xzf Python-${PYTHON_FULL_VERSION}.tgz; \
+    cd Python-${PYTHON_FULL_VERSION}; \
+    \
+    # Configure with optimizations
+    ./configure \
+    --enable-optimizations \
+    --enable-shared \
+    --with-lto \
+    --prefix=/usr/local \
+    LDFLAGS="-Wl,-rpath /usr/local/lib"; \
+    \
+    # Build and install
+    make -j$(nproc); \
+    make altinstall; \
+    \
+    # Create symlinks
+    ln -sf /usr/local/bin/python${PYTHON_VERSION} /usr/local/bin/python3; \
+    ln -sf /usr/local/bin/python${PYTHON_VERSION} /usr/local/bin/python; \
+    ln -sf /usr/local/bin/pip${PYTHON_VERSION} /usr/local/bin/pip3; \
+    ln -sf /usr/local/bin/pip${PYTHON_VERSION} /usr/local/bin/pip; \
+    \
+    # Update library cache
+    ldconfig; \
+    \
+    # Cleanup
+    cd /; \
+    rm -rf /tmp/Python-*; \
+    \
+    # Verify installation
+    python --version; \
+    pip --version
+
+# Update PATH to ensure our Python is used
+ENV PATH=/usr/local/bin:${PATH}
 
 # Upgrade pip and install Python build dependencies
 RUN python -m pip install --upgrade pip setuptools wheel && \
@@ -127,7 +157,6 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
     cffi \
     future \
     ninja \
-    cmake \
     scikit-build
 
 # Clone and build PyTorch from source
@@ -157,7 +186,7 @@ RUN set -eux; \
     TORCH_MAJOR=$(echo ${TORCH_VERSION} | cut -d. -f1); \
     TORCH_MINOR=$(echo ${TORCH_VERSION} | cut -d. -f2); \
     \
-    # torchvision version mapping (approximate)
+    # torchvision version mapping
     if [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "9" ]; then \
     VISION_VERSION="0.22.0"; \
     elif [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "8" ]; then \
@@ -175,13 +204,11 @@ RUN set -eux; \
     cd /; \
     rm -rf /build/vision
 
-# Build and install torchaudio from source
+# Build and install torchaudio from source (optional)
 RUN set -eux; \
-    # Determine compatible torchaudio version based on torch version
     TORCH_MAJOR=$(echo ${TORCH_VERSION} | cut -d. -f1); \
     TORCH_MINOR=$(echo ${TORCH_VERSION} | cut -d. -f2); \
     \
-    # torchaudio version mapping (approximate)
     if [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "9" ]; then \
     AUDIO_VERSION="2.5.0"; \
     elif [ "$TORCH_MAJOR" = "2" ] && [ "$TORCH_MINOR" -ge "8" ]; then \
@@ -211,6 +238,6 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Verify PyTorch installation
-RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA arch list: {torch.cuda.get_arch_list() if torch.cuda.is_available() else \"N/A\"}')" || \
+# Verify installation
+RUN python -c "import torch; print(f'Python: {__import__(\"sys\").version}'); print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')" || \
     echo "PyTorch verification will complete on Jetson device"
