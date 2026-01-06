@@ -4,7 +4,7 @@
 # Uses:
 # - Miniforge for prebuilt Python 3.11/3.12 (ARM64)
 # - Official PyTorch ARM64 prebuilt wheels
-# Fast build time: ~10-20 minutes!
+# Fast build time: ~5-10 minutes!
 
 ARG L4T_VERSION=r36.2.0
 ARG PYTHON_VERSION=3.11
@@ -13,7 +13,6 @@ ARG PYTHON_VERSION=3.11
 FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
 
 ARG TORCH_VERSION=2.9.0
-ARG CUDA_VERSION=12.2
 ARG PYTHON_VERSION=3.11
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -23,89 +22,45 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/cuda/bin:${PATH} \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 
-# Install system dependencies
-RUN set -eux; \
-    apt-get update; \
+# Install minimal system dependencies
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
-    curl \
     wget \
     ca-certificates \
-    pkg-config \
-    # BLAS/LAPACK
-    libopenblas-dev \
-    libblas-dev \
-    liblapack-dev \
-    gfortran \
-    # OpenMPI for distributed
-    libopenmpi-dev \
-    openmpi-bin \
-    openmpi-common \
-    libomp-dev \
-    # Image/Audio processing
-    libjpeg-dev \
-    libpng-dev \
+    git \
+    # For torchvision
+    libjpeg8 \
+    libpng16-16 \
+    # For torchaudio
     libsndfile1 \
-    ffmpeg \
-    libfreetype6-dev \
-    libavcodec-dev \
-    libavformat-dev \
-    libavutil-dev \
-    libswscale-dev \
-    libswresample-dev \
-    # Other dependencies
-    libhdf5-dev \
-    libssl-dev \
-    libffi-dev; \
+    ffmpeg && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Miniforge (conda-forge with ARM64 support)
-# This provides prebuilt Python 3.11/3.12 for aarch64
+# Install Miniforge (prebuilt Python for ARM64)
 ENV CONDA_DIR=/opt/conda
 ENV PATH=${CONDA_DIR}/bin:${PATH}
 
-RUN set -eux; \
-    wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh -O /tmp/miniforge.sh; \
-    bash /tmp/miniforge.sh -b -p ${CONDA_DIR}; \
-    rm /tmp/miniforge.sh; \
-    \
-    # Create environment with specified Python version
-    conda create -n pytorch python=${PYTHON_VERSION} -y; \
-    \
-    # Clean conda cache
-    conda clean -afy
+RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh -O /tmp/miniforge.sh && \
+    bash /tmp/miniforge.sh -b -p ${CONDA_DIR} && \
+    rm /tmp/miniforge.sh && \
+    conda create -n pytorch python=${PYTHON_VERSION} -y && \
+    conda clean -afy && \
+    rm -rf /opt/conda/pkgs/*
 
-# Activate conda environment
+# Activate conda environment  
 ENV PATH=${CONDA_DIR}/envs/pytorch/bin:${PATH}
 ENV CONDA_DEFAULT_ENV=pytorch
 
-# Upgrade pip
-RUN pip install --upgrade pip setuptools wheel
-
 # Install PyTorch from official ARM64 prebuilt wheels
-# PyTorch 2.7+ has official aarch64 CUDA wheels!
-RUN set -eux; \
-    # For L4T r36.2.0 with CUDA 12.2, use cu121 (closest available)
-    CUDA_WHL="cu121"; \
-    \
-    # Install PyTorch with official ARM64 wheels
-    pip install --no-cache-dir \
+RUN pip install --no-cache-dir \
     torch==${TORCH_VERSION} \
     torchvision \
     torchaudio \
-    --index-url https://download.pytorch.org/whl/${CUDA_WHL} || \
-    # Fallback: try without CUDA specification
-    pip install --no-cache-dir \
-    torch==${TORCH_VERSION} \
-    torchvision \
-    torchaudio; \
-    \
-    # Cleanup
-    rm -rf /root/.cache/pip
+    --index-url https://download.pytorch.org/whl/cu121 && \
+    rm -rf /root/.cache/pip /tmp/*
 
 WORKDIR /app
 
 # Verify installation
-RUN python -c "import torch; print(f'Python: {__import__(\"sys\").version}'); print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')" || \
-    echo "PyTorch verification will complete on Jetson device"
+RUN python -c "import torch; print(f'Python: {__import__(\"sys\").version}'); print(f'PyTorch {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}')" || true
