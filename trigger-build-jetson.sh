@@ -56,7 +56,7 @@ parse_version() {
     local ver="$1"
     # Extract parts using regex
     if [[ "$ver" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-cuda([0-9]+\.[0-9]+)-py([0-9]+\.[0-9]+)$ ]]; then
-        echo "{\"l4t\":\"r36.4.0\",\"jetpack\":\"6.1\",\"torch\":\"${BASH_REMATCH[1]}\",\"cuda\":\"${BASH_REMATCH[2]}\",\"python\":\"${BASH_REMATCH[3]}\"}"
+        echo "{\"l4t\":\"r36.2.0\",\"jetpack\":\"6.0\",\"torch\":\"${BASH_REMATCH[1]}\",\"cuda\":\"${BASH_REMATCH[2]}\",\"python\":\"${BASH_REMATCH[3]}\"}"
     else
         echo "Error: Invalid version format: $ver" >&2
         echo "Expected format: TORCH-cudaCUDA-pyPYTHON (e.g., 2.9.0-cuda12.8-py3.11)" >&2
@@ -66,14 +66,14 @@ parse_version() {
 
 # Default versions to build (Jetson - JetPack 6.x only)
 DEFAULT_VERSIONS='[
-  {"l4t":"r36.4.0","jetpack":"6.1","torch":"2.7.1","cuda":"12.8","python":"3.11"},
-  {"l4t":"r36.4.0","jetpack":"6.1","torch":"2.7.1","cuda":"12.8","python":"3.12"},
-  {"l4t":"r36.4.0","jetpack":"6.1","torch":"2.8.0","cuda":"12.8","python":"3.11"},
-  {"l4t":"r36.4.0","jetpack":"6.1","torch":"2.8.0","cuda":"12.8","python":"3.12"},
-  {"l4t":"r36.4.0","jetpack":"6.1","torch":"2.9.0","cuda":"12.8","python":"3.11"},
-  {"l4t":"r36.4.0","jetpack":"6.1","torch":"2.9.0","cuda":"12.8","python":"3.12"},
-  {"l4t":"r36.4.0","jetpack":"6.1","torch":"2.9.0","cuda":"13.0","python":"3.11"},
-  {"l4t":"r36.4.0","jetpack":"6.1","torch":"2.9.0","cuda":"13.0","python":"3.12"}
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.1","cuda":"12.8","python":"3.11"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.1","cuda":"12.8","python":"3.12"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.8.0","cuda":"12.8","python":"3.11"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.8.0","cuda":"12.8","python":"3.12"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"12.8","python":"3.11"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"12.8","python":"3.12"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"13.0","python":"3.11"},
+  {"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","cuda":"13.0","python":"3.12"}
 ]'
 
 # Parse arguments
@@ -121,7 +121,7 @@ VERSION_COUNT=$(echo "$VERSIONS" | jq 'length')
 
 echo "==========================================="
 echo "  Jetson PyTorch Docker Build Trigger"
-echo "  (JetPack 6.x / L4T R36.4.0 / ARM64)"
+echo "  (JetPack 6.0 / L4T R36.2.0 / ARM64)"
 echo "==========================================="
 echo
 echo "Building $VERSION_COUNT Jetson image(s) in parallel:"

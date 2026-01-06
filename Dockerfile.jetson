@@ -11,7 +11,7 @@
 #     --build-arg PYTHON_VERSION=3.11 \
 #     -f Dockerfile.jetson -t pytorch-jetson:2.9.0 .
 
-ARG L4T_VERSION=r36.4.0
+ARG L4T_VERSION=r36.2.0
 ARG PYTHON_VERSION=3.11
 
 # Use NVIDIA L4T base image
