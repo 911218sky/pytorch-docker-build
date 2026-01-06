@@ -10,7 +10,8 @@ Automated PyTorch Docker image builder with customizable Python, PyTorch, and CU
 - ✅ **Pre-compiled wheel** installation (fast)
 - ✅ **Build from source** (supports RTX 5090 SM 10.0)
 - ✅ **CUDA 13.x** support with Ubuntu 24.04
-- ✅ **NVIDIA Jetson** ARM64 support
+- ✅ **NVIDIA Jetson** ARM64 support (Nano, TX2, Xavier, Orin)
+- ✅ **Multi-arch wheels** - One wheel supports all Jetson boards
 - ✅ Auto-upload wheels to GitHub Releases
 
 ---
@@ -39,7 +40,9 @@ Automated PyTorch Docker image builder with customizable Python, PyTorch, and CU
 | `2.7.1-jp6.0-py3.11` | 2.7.1   | 6.0     | 3.11   |
 | `2.7.1-jp6.0-py3.12` | 2.7.1   | 6.0     | 3.12   |
 | `2.8.0-jp6.0-py3.11` | 2.8.0   | 6.0     | 3.11   |
+| `2.8.0-jp6.0-py3.12` | 2.8.0   | 6.0     | 3.12   |
 | `2.9.0-jp6.0-py3.11` | 2.9.0   | 6.0     | 3.11   |
+| `2.9.0-jp6.0-py3.12` | 2.9.0   | 6.0     | 3.12   |
 
 ---
 
@@ -107,7 +110,7 @@ gh workflow run build-pytorch.yml \
 | `cuda_arch_list`    | CUDA architecture list    | `8.0;8.6;8.9;9.0;10.0+PTX` |
 | `max_jobs`          | Parallel compilation jobs | `4`                        |
 
-**CUDA Architecture Reference:**
+**AMD64 CUDA Architecture Reference:**
 
 | SM   | GPU Series           |
 | ---- | -------------------- |
@@ -124,13 +127,24 @@ gh workflow run build-pytorch.yml \
 Source-built wheels are automatically uploaded to [GitHub Releases](https://github.com/911218sky/pytorch-docker-build/releases).
 
 ```bash
-# Direct install
+# Direct install from release
 pip install https://github.com/911218sky/pytorch-docker-build/releases/download/amd64-wheels-v2.9.0-cuda13.0/torch-2.9.0-cp312-cp312-linux_x86_64.whl
 ```
 
 ---
 
 ## 🤖 Jetson Support
+
+### Supported Devices
+
+All Jetson boards are supported with a single wheel:
+
+| SM  | Device                              |
+| --- | ----------------------------------- |
+| 5.3 | Jetson Nano                         |
+| 6.2 | Jetson TX2                          |
+| 7.2 | Jetson Xavier NX, AGX Xavier        |
+| 8.7 | Jetson Orin Nano, Orin NX, AGX Orin |
 
 ### Pull Jetson Image
 
@@ -147,12 +161,23 @@ docker run --runtime nvidia -it sky1218/pytorch-jetson:2.7.1-jp6.0-py3.11
 ### Trigger Jetson Build
 
 ```bash
+# Build for all Jetson boards (default)
 ./trigger-build-jetson.sh 2.7.1-jp6.0-py3.11
+
+# Build for specific boards only (e.g., Orin only)
+gh workflow run build-jetson.yml \
+  -f 'versions=[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.1","python":"3.11"}]' \
+  -f cuda_arch_list="8.7"
 ```
 
-### Build Strategy
+**Jetson Parameters:**
 
-Jetson images use a 2-tier strategy:
+| Parameter        | Description         | Default                        |
+| ---------------- | ------------------- | ------------------------------ |
+| `versions`       | Version matrix JSON | -                              |
+| `cuda_arch_list` | CUDA architectures  | `5.3;6.2;7.2;8.7` (all boards) |
+
+### Build Strategy
 
 ```
 1. GitHub Releases  ──→  Check cached wheels (fastest)
@@ -202,6 +227,7 @@ docker buildx build \
   --build-arg L4T_VERSION=r36.2.0 \
   --build-arg TORCH_VERSION=2.7.1 \
   --build-arg PYTHON_VERSION=3.11 \
+  --build-arg TORCH_CUDA_ARCH_LIST="5.3;6.2;7.2;8.7" \
   --build-arg MAX_JOBS=2 \
   -f Dockerfile.jetson.template \
   -t my-pytorch-jetson:latest .
