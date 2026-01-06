@@ -1,4 +1,4 @@
-name: Build Jetson PyTorch Docker Images
+name: Build Jetson PyTorch Docker Images (From Source)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       versions:
         description: "Version matrix JSON"
         required: true
-        default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.9.0","python":"3.11"}]'
+        default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.0","python":"3.11"}]'
         type: string
 
 env:
@@ -16,24 +16,26 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # 6 hours (GitHub maximum)
+    timeout-minutes: 360 # 6 hours (source build takes 2-4 hours)
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
-      # Public repo: unlimited free minutes, no need to limit parallel builds
+      max-parallel: 2 # Limit parallel builds
       matrix:
         version: ${{ fromJson(inputs.versions) }}
 
     steps:
       - name: Free disk space
         run: |
-          echo "Freeing disk space..."
+          echo "Freeing disk space for source build..."
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /opt/hostedtoolcache/go
+          sudo rm -rf /opt/hostedtoolcache/node
           sudo docker image prune --all --force
           df -h
 
@@ -73,11 +75,16 @@ jobs:
           TAG="${TORCH_VERSION}-jp${JETPACK_VERSION}-py${PYTHON_VERSION}"
 
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Building Jetson image: $TAG"
+          echo "========================================"
+          echo "Building Jetson image FROM SOURCE: $TAG"
+          echo "========================================"
+          echo "  Base: nvcr.io/nvidia/l4t-base:${L4T_VERSION}"
           echo "  L4T: $L4T_VERSION"
-          echo "  JetPack: $JETPACK_VERSION (CUDA 12.2 bundled)"
-          echo "  PyTorch: $TORCH_VERSION"
+          echo "  JetPack: $JETPACK_VERSION"
+          echo "  PyTorch: $TORCH_VERSION (building from source)"
           echo "  Python: $PYTHON_VERSION (via Miniforge)"
+          echo ""
+          echo "⚠️  This build may take 2-4 hours due to QEMU ARM64 emulation"
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -93,6 +100,7 @@ jobs:
             L4T_VERSION=${{ matrix.version.l4t }}
             TORCH_VERSION=${{ matrix.version.torch }}
             PYTHON_VERSION=${{ matrix.version.python }}
+            MAX_JOBS=2
           cache-from: type=gha
           cache-to: type=gha,mode=max
           no-cache: false

@@ -138,13 +138,36 @@ Each image includes:
 
 This project supports NVIDIA Jetson Orin devices with ARM64 architecture (JetPack 6.x).
 
-### JetPack 6.0 Specifications
+### Build Method
 
-- **L4T Version**: R36.2.0
-- **Ubuntu**: 22.04
-- **CUDA**: 12.2 (bundled with L4T base image)
-- **Python**: Via Miniforge (prebuilt ARM64)
-- **PyTorch**: Official ARM64 prebuilt wheels
+PyTorch is **built from source** using scripts adapted from [dusty-nv/jetson-containers](https://github.com/dusty-nv/jetson-containers). This is necessary because:
+
+- NVIDIA official Jetson PyTorch wheels only support Python 3.10
+- Official wheels only go up to PyTorch 2.5
+
+#### How the Build Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GitHub Actions Workflow                       │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Setup QEMU for ARM64 emulation                              │
+│  2. Pull nvcr.io/nvidia/l4t-base:r36.2.0 (includes CUDA)        │
+│  3. Install Miniforge (provides Python 3.11/3.12 for ARM64)     │
+│  4. Run build scripts (adapted from dusty-nv/jetson-containers):│
+│     ├── scripts/pytorch/build.sh       (PyTorch from source)   │
+│     ├── scripts/pytorch/build-torchvision.sh                   │
+│     └── scripts/pytorch/build-torchaudio.sh                    │
+│  5. Push to Docker Hub & GitHub Container Registry              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Supported Configurations
+
+| JetPack | L4T Version | CUDA | Ubuntu |
+| ------- | ----------- | ---- | ------ |
+| 6.0     | r36.2.0     | 12.2 | 22.04  |
+| 6.1     | r36.4.0     | 12.6 | 22.04  |
 
 ### Available Jetson Images
 
@@ -161,30 +184,30 @@ This project supports NVIDIA Jetson Orin devices with ARM64 architecture (JetPac
 
 ```bash
 # From Docker Hub
-docker pull sky1218/pytorch-jetson:2.9.0-jp6.0-py3.12
+docker pull sky1218/pytorch-jetson:2.7.0-jp6.0-py3.11
 
 # From GitHub Container Registry
-docker pull ghcr.io/911218sky/pytorch-jetson:2.9.0-jp6.0-py3.12
+docker pull ghcr.io/911218sky/pytorch-jetson:2.7.0-jp6.0-py3.11
 ```
 
 ### Run on Jetson
 
 ```bash
 # Run with GPU support on Jetson
-docker run --runtime nvidia -it sky1218/pytorch-jetson:2.9.0-jp6.0-py3.12
+docker run --runtime nvidia -it sky1218/pytorch-jetson:2.7.0-jp6.0-py3.11
 
 # Mount your code
-docker run --runtime nvidia -v $(pwd):/app -it sky1218/pytorch-jetson:2.9.0-jp6.0-py3.12
+docker run --runtime nvidia -v $(pwd):/app -it sky1218/pytorch-jetson:2.7.0-jp6.0-py3.11
 ```
 
 ### Trigger Jetson Builds
 
 ```bash
 # Build single version
-./trigger-build-jetson.sh 2.9.0-jp6.0-py3.12
+./trigger-build-jetson.sh 2.7.0-jp6.0-py3.11
 
 # Build multiple versions
-./trigger-build-jetson.sh 2.9.0-jp6.0-py3.11 2.8.0-jp6.0-py3.12
+./trigger-build-jetson.sh 2.7.0-jp6.0-py3.11 2.7.0-jp6.0-py3.12
 
 # Build from JSON file
 ./trigger-build-jetson.sh -f versions-jetson.jsonc
@@ -200,24 +223,28 @@ docker run --runtime nvidia -v $(pwd):/app -it sky1218/pytorch-jetson:2.9.0-jp6.
 
 Build locally for Jetson (requires ARM64 or QEMU).
 
+> ⚠️ **Note**: PyTorch is built **from source**. Build time: **2-4 hours** with QEMU emulation.
+
 ```bash
 # Using docker buildx for cross-platform build
 docker buildx build \
   --platform linux/arm64 \
   --build-arg L4T_VERSION=r36.2.0 \
-  --build-arg TORCH_VERSION=2.9.0 \
-  --build-arg PYTHON_VERSION=3.12 \
+  --build-arg TORCH_VERSION=2.7.0 \
+  --build-arg PYTHON_VERSION=3.11 \
+  --build-arg MAX_JOBS=2 \
   -f Dockerfile.jetson.template \
-  -t sky1218/pytorch-jetson:2.9.0-jp6.0-py3.12 .
+  -t sky1218/pytorch-jetson:2.7.0-jp6.0-py3.11 .
 ```
 
 #### Build Arguments
 
-| Argument         | Description            | Default   |
-| ---------------- | ---------------------- | --------- |
-| `L4T_VERSION`    | L4T base image version | `r36.2.0` |
-| `TORCH_VERSION`  | PyTorch version        | `2.9.0`   |
-| `PYTHON_VERSION` | Python version         | `3.11`    |
+| Argument         | Description                                 | Default   |
+| ---------------- | ------------------------------------------- | --------- |
+| `L4T_VERSION`    | L4T base image version                      | `r36.2.0` |
+| `TORCH_VERSION`  | PyTorch version to build from source        | `2.7.0`   |
+| `PYTHON_VERSION` | Python version (via Miniforge)              | `3.11`    |
+| `MAX_JOBS`       | Parallel compile jobs (lower = less memory) | `4`       |
 
 ## Links
 
