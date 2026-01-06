@@ -8,6 +8,11 @@ on:
         required: true
         default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.1","python":"3.11"}]'
         type: string
+      cuda_arch_list:
+        description: "CUDA architectures (5.3=Nano, 6.2=TX2, 7.2=Xavier, 8.7=Orin)"
+        required: false
+        default: "5.3;6.2;7.2;8.7"
+        type: string
 
 env:
   DOCKERHUB_IMAGE: sky1218/pytorch-jetson
@@ -98,6 +103,7 @@ jobs:
             TORCH_VERSION=${{ matrix.version.torch }}
             PYTHON_VERSION=${{ matrix.version.python }}
             MAX_JOBS=2
+            TORCH_CUDA_ARCH_LIST=${{ inputs.cuda_arch_list }}
             GITHUB_OWNER=${{ github.repository_owner }}
             GITHUB_REPO=${{ github.event.repository.name }}
           cache-from: type=gha
@@ -112,6 +118,26 @@ jobs:
           docker run --rm -v $(pwd)/wheels:/output $IMAGE_ID sh -c "cp /wheels/*.whl /output/ 2>/dev/null || echo 'No wheels found (may have used cached wheels)'"
           ls -la wheels/ || echo "No wheels extracted"
 
+      - name: Compress wheels (split if > 2GB)
+        if: hashFiles('wheels/*.whl') != ''
+        run: |
+          cd wheels
+          TOTAL_SIZE=$(du -sb . | cut -f1)
+          echo "Total wheels size: $TOTAL_SIZE bytes"
+
+          # 2GB = 2147483648 bytes
+          MAX_SIZE=2147483648
+
+          if [ "$TOTAL_SIZE" -gt "$MAX_SIZE" ]; then
+            echo "Size exceeds 2GB, creating split archive..."
+            tar -cvf - *.whl | split -b 1900M - pytorch-jetson-wheels.tar.part
+            ls -la pytorch-jetson-wheels.tar.part*
+          else
+            echo "Size under 2GB, creating single archive..."
+            tar -czvf pytorch-jetson-wheels.tar.gz *.whl
+            ls -la pytorch-jetson-wheels.tar.gz
+          fi
+
       - name: Upload wheels to GitHub Release
         if: hashFiles('wheels/*.whl') != ''
         uses: softprops/action-gh-release@v1
@@ -124,13 +150,19 @@ jobs:
             - PyTorch: ${{ steps.tag.outputs.torch_version }}
             - Python: ${{ steps.tag.outputs.python_version }}
             - Platform: linux/arm64 (Jetson)
+            - CUDA Arch: ${{ inputs.cuda_arch_list }}
 
             Install with:
             ```bash
             pip install <wheel_url>
             ```
-          files: wheels/*.whl
+          files: |
+            wheels/*.whl
+            wheels/pytorch-jetson-wheels.tar.gz
+            wheels/pytorch-jetson-wheels.tar.part*
           fail_on_unmatched_files: false
+          generate_release_notes: false
+          make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
