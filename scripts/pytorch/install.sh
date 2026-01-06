@@ -2,8 +2,7 @@
 # Install PyTorch for Jetson
 # Priority:
 # 1. Try own GitHub releases (previously built wheels)
-# 2. Try Jetson AI Lab PyPI
-# 3. Build from source and upload to GitHub releases
+# 2. Build from source and upload to GitHub releases
 #
 # Adapted from: https://github.com/dusty-nv/jetson-containers
 set -ex
@@ -39,30 +38,8 @@ if curl --output /dev/null --silent --head --fail "${WHEEL_URL}"; then
     fi
 fi
 
-# Step 2: Try Jetson AI Lab PyPI
-echo "Step 2: Trying Jetson AI Lab PyPI..."
-if pip install --no-cache-dir \
-    --index-url https://pypi.jetson-ai-lab.dev/simple \
-    --trusted-host pypi.jetson-ai-lab.dev \
-    "torch==${TORCH_VERSION}" 2>/dev/null; then
-    echo "✓ PyTorch installed from Jetson AI Lab PyPI"
-    python3 -c 'import torch; print(f"PyTorch {torch.__version__} installed successfully")'
-    exit 0
-fi
-
-# Try with version prefix
-TORCH_MAJOR_MINOR="${TORCH_VERSION%.*}"
-if pip install --no-cache-dir \
-    --index-url https://pypi.jetson-ai-lab.dev/simple \
-    --trusted-host pypi.jetson-ai-lab.dev \
-    "torch>=${TORCH_MAJOR_MINOR},<${TORCH_MAJOR_MINOR%.*}.$((${TORCH_MAJOR_MINOR#*.}+1))" 2>/dev/null; then
-    echo "✓ PyTorch installed from Jetson AI Lab PyPI (version range)"
-    python3 -c 'import torch; print(f"PyTorch {torch.__version__} installed successfully")'
-    exit 0
-fi
-
-# Step 3: Build from source
+# Step 2: Build from source
 echo "========================================"
-echo "Step 3: Building PyTorch from source..."
+echo "Step 2: Building PyTorch from source..."
 echo "========================================"
 exec /tmp/pytorch/build-from-source.sh

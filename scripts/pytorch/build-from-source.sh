@@ -35,6 +35,7 @@ export USE_PRIORITIZED_TEXT_FOR_LD=1  # mandatory for ARM
 export PYTORCH_BUILD_NUMBER=1
 export USE_CUDA=1
 export USE_CUDNN=1
+export TORCH_CUDA_ARCH_LIST="8.7"  # Jetson Orin only (reduces wheel size significantly)
 export USE_NCCL=${USE_NCCL:-0}
 export USE_DISTRIBUTED=${USE_DISTRIBUTED:-0}
 export USE_MKLDNN=0
