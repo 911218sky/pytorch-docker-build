@@ -1,268 +1,264 @@
-# PyTorch Docker Builder
+# 🚀 PyTorch Docker Builder
 
-Automated Docker image builder for PyTorch with customizable Python, PyTorch, and CUDA versions.
+[![Build Status](https://github.com/911218sky/pytorch-docker-build/actions/workflows/build-pytorch.yml/badge.svg)](https://github.com/911218sky/pytorch-docker-build/actions)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-sky1218%2Fpytorch-blue)](https://hub.docker.com/r/sky1218/pytorch)
 
-## Available Images
+自動化 PyTorch Docker 映像建構工具，支援自訂 Python、PyTorch 和 CUDA 版本。
 
-| Tag                     | PyTorch | CUDA | Python |
-| ----------------------- | ------- | ---- | ------ |
-| `2.7.1-cuda12.8-py3.11` | 2.7.1   | 12.8 | 3.11   |
-| `2.7.1-cuda12.8-py3.12` | 2.7.1   | 12.8 | 3.12   |
-| `2.8.0-cuda12.8-py3.11` | 2.8.0   | 12.8 | 3.11   |
-| `2.8.0-cuda12.8-py3.12` | 2.8.0   | 12.8 | 3.12   |
-| `2.9.0-cuda12.8-py3.11` | 2.9.0   | 12.8 | 3.11   |
-| `2.9.0-cuda12.8-py3.12` | 2.9.0   | 12.8 | 3.12   |
-| `2.9.0-cuda13.0-py3.11` | 2.9.0   | 13.0 | 3.11   |
-| `2.9.0-cuda13.0-py3.12` | 2.9.0   | 13.0 | 3.12   |
+**特色功能：**
 
-## Quick Start
+- ✅ 支援 **預編譯 wheel** 快速安裝
+- ✅ 支援 **從源代碼編譯** (含 RTX 5090 SM 10.0)
+- ✅ 支援 **CUDA 13.x** + Ubuntu 24.04
+- ✅ 支援 **NVIDIA Jetson** ARM64 架構
+- ✅ 自動上傳 wheel 到 GitHub Releases
 
-### Pull from Docker Hub
+---
 
-```bash
-docker pull sky1218/pytorch:2.9.0-cuda13.0-py3.12
-```
+## 📦 可用映像
 
-### Pull from GitHub Container Registry
+### AMD64 (x86_64) - 桌面/伺服器
 
-```bash
-docker pull ghcr.io/911218sky/pytorch:2.9.0-cuda13.0-py3.12
-```
+| 標籤                    | PyTorch | CUDA | Python | 備註          |
+| ----------------------- | ------- | ---- | ------ | ------------- |
+| `2.7.1-cuda12.8-py3.11` | 2.7.1   | 12.8 | 3.11   | 穩定版        |
+| `2.7.1-cuda12.8-py3.12` | 2.7.1   | 12.8 | 3.12   | 穩定版        |
+| `2.8.0-cuda12.8-py3.11` | 2.8.0   | 12.8 | 3.11   |               |
+| `2.8.0-cuda12.8-py3.12` | 2.8.0   | 12.8 | 3.12   |               |
+| `2.9.0-cuda12.8-py3.11` | 2.9.0   | 12.8 | 3.11   | 最新版        |
+| `2.9.0-cuda12.8-py3.12` | 2.9.0   | 12.8 | 3.12   | 最新版        |
+| `2.9.0-cuda13.0-py3.11` | 2.9.0   | 13.0 | 3.11   | RTX 5090 支援 |
+| `2.9.0-cuda13.0-py3.12` | 2.9.0   | 13.0 | 3.12   | RTX 5090 支援 |
 
-### Run with GPU Support
+> 💡 `-source` 後綴的標籤表示從源代碼編譯
 
-```bash
-# From Docker Hub
-docker run --gpus all -it sky1218/pytorch:2.9.0-cuda13.0-py3.12
+### ARM64 (Jetson) - 邊緣運算
 
-# From GitHub Container Registry
-docker run --gpus all -it ghcr.io/911218sky/pytorch:2.9.0-cuda13.0-py3.12
+| 標籤                 | PyTorch | JetPack | Python |
+| -------------------- | ------- | ------- | ------ |
+| `2.7.1-jp6.0-py3.11` | 2.7.1   | 6.0     | 3.11   |
+| `2.7.1-jp6.0-py3.12` | 2.7.1   | 6.0     | 3.12   |
+| `2.8.0-jp6.0-py3.11` | 2.8.0   | 6.0     | 3.11   |
+| `2.9.0-jp6.0-py3.11` | 2.9.0   | 6.0     | 3.11   |
 
-# Mount your code
-docker run --gpus all -v $(pwd):/app -it sky1218/pytorch:2.9.0-cuda13.0-py3.12
-```
+---
 
-## Trigger Builds
+## ⚡ 快速開始
 
-Use the trigger script to build images via GitHub Actions. All builds run in parallel.
-
-### Prerequisites
-
-1. Install [GitHub CLI](https://cli.github.com/)
-2. Login: `gh auth login`
-
-### Usage
+### 拉取映像
 
 ```bash
-# Build a single version
-./trigger-build.sh 2.8.0-cuda12.8-py3.11
+# Docker Hub
+docker pull sky1218/pytorch:2.9.0-cuda12.8-py3.12
 
-# Build multiple versions (runs in parallel)
-./trigger-build.sh 2.8.0-cuda12.8-py3.11 2.7.1-cuda12.8-py3.12 2.9.0-cuda13.0-py3.11
-
-# Build from JSON file
-./trigger-build.sh -f versions.json
-
-# Build all default versions
-./trigger-build.sh
-
-# Show help
-./trigger-build.sh --help
+# GitHub Container Registry
+docker pull ghcr.io/911218sky/pytorch:2.9.0-cuda12.8-py3.12
 ```
 
-### Version Format
-
-```
-TORCH_VERSION-cudaCUDA_VERSION-pyPYTHON_VERSION
-```
-
-Examples:
-
-- `2.8.0-cuda12.8-py3.11`
-- `2.9.0-cuda13.0-py3.12`
-
-### Using versions.json
-
-Create a `versions.json` file:
-
-```json
-[
-  { "torch": "2.9.0", "cuda": "13.0", "python": "3.12" },
-  { "torch": "2.8.0", "cuda": "12.8", "python": "3.11" }
-]
-```
-
-Then run:
+### 執行容器
 
 ```bash
-./trigger-build.sh -f versions.json
+# 啟用 GPU 支援
+docker run --gpus all -it sky1218/pytorch:2.9.0-cuda12.8-py3.12
+
+# 掛載程式碼
+docker run --gpus all -v $(pwd):/app -it sky1218/pytorch:2.9.0-cuda12.8-py3.12
+
+# 驗證 CUDA
+docker run --gpus all sky1218/pytorch:2.9.0-cuda12.8-py3.12 python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
 ```
 
-## Local Build
+---
 
-Build locally without GitHub Actions:
+## 🔧 建構方式
+
+### 方式 1：使用預編譯 wheel（推薦，快速）
+
+直接從 PyTorch 官方下載預編譯的 wheel，通常在 5 分鐘內完成。
 
 ```bash
-# Using build.sh
-./build.sh sky1218/pytorch:2.9.0-cuda13.0-py3.12
+# 使用腳本觸發
+./trigger-build.sh 2.9.0-cuda12.8-py3.12
 
-# Using docker build directly
+# 或直接使用 GitHub CLI
+gh workflow run build-pytorch.yml \
+  -f 'versions=[{"torch":"2.9.0","cuda":"12.8","python":"3.12"}]' \
+  -f build_from_source=false
+```
+
+### 方式 2：從源代碼編譯（自訂 CUDA 架構）
+
+適用於需要特定 GPU 架構支援的情況，例如 RTX 5090 (SM 10.0)。
+
+```bash
+gh workflow run build-pytorch.yml \
+  -f 'versions=[{"torch":"2.9.0","cuda":"13.0","python":"3.12"}]' \
+  -f build_from_source=true \
+  -f 'cuda_arch_list=8.0;8.6;8.9;9.0;10.0+PTX' \
+  -f max_jobs=4
+```
+
+**參數說明：**
+
+| 參數                | 說明             | 預設值                     |
+| ------------------- | ---------------- | -------------------------- |
+| `versions`          | 版本矩陣 JSON    | -                          |
+| `build_from_source` | 是否從源代碼編譯 | `false`                    |
+| `cuda_arch_list`    | CUDA 架構列表    | `8.0;8.6;8.9;9.0;10.0+PTX` |
+| `max_jobs`          | 平行編譯任務數   | `4`                        |
+
+**CUDA 架構對照表：**
+
+| 架構 | GPU 系列             |
+| ---- | -------------------- |
+| 8.0  | A100                 |
+| 8.6  | RTX 3090, A40        |
+| 8.9  | RTX 4090, L40        |
+| 9.0  | H100                 |
+| 10.0 | RTX 5090 (Blackwell) |
+
+---
+
+## 📥 下載預編譯 Wheel
+
+從源代碼編譯的 wheel 會自動上傳到 [GitHub Releases](https://github.com/911218sky/pytorch-docker-build/releases)。
+
+```bash
+# 下載範例
+wget https://github.com/911218sky/pytorch-docker-build/releases/download/amd64-wheels-v2.9.0-cuda13.0/torch-2.9.0-cp312-cp312-linux_x86_64.whl
+
+# 直接安裝
+pip install https://github.com/911218sky/pytorch-docker-build/releases/download/amd64-wheels-v2.9.0-cuda13.0/torch-2.9.0-cp312-cp312-linux_x86_64.whl
+```
+
+---
+
+## 🤖 Jetson 支援
+
+### 拉取 Jetson 映像
+
+```bash
+docker pull sky1218/pytorch-jetson:2.7.1-jp6.0-py3.11
+```
+
+### 在 Jetson 上執行
+
+```bash
+docker run --runtime nvidia -it sky1218/pytorch-jetson:2.7.1-jp6.0-py3.11
+```
+
+### 觸發 Jetson 建構
+
+```bash
+./trigger-build-jetson.sh 2.7.1-jp6.0-py3.11
+```
+
+### 建構策略
+
+Jetson 映像使用 2 層策略：
+
+```
+1. GitHub Releases  ──→  檢查已快取的 wheel（最快）
+         │
+         ↓ (找不到)
+2. 從源代碼編譯    ──→  在 ARM64 runner 上編譯（2-4 小時）
+         │
+         ↓ (完成後)
+3. 上傳 wheel      ──→  發布到 GitHub Releases 供下次使用
+```
+
+---
+
+## 🏗️ 本地建構
+
+### AMD64
+
+```bash
 docker build \
   --build-arg PYTHON_VERSION=3.12 \
   --build-arg TORCH_VERSION=2.9.0 \
   --build-arg CUDA_VERSION=cu130 \
   -f Dockerfile.template \
-  -t sky1218/pytorch:2.9.0-cuda13.0-py3.12 .
+  -t my-pytorch:latest .
 ```
 
-## GitHub Actions Setup
-
-To use the automated build workflow, add these secrets to your repository:
-
-| Secret               | Description              |
-| -------------------- | ------------------------ |
-| `DOCKERHUB_USERNAME` | Your Docker Hub username |
-| `DOCKERHUB_TOKEN`    | Docker Hub access token  |
-
-Generate a token at: https://hub.docker.com/settings/security
-
-## Image Contents
-
-Each image includes:
-
-- Python (slim base)
-- PyTorch + torchvision + torchaudio (with CUDA support)
-- Common dependencies: git, curl, ffmpeg, image libraries
-
-## Jetson Support (ARM64)
-
-This project supports NVIDIA Jetson Orin devices with ARM64 architecture (JetPack 6.x).
-
-### Build Method
-
-Uses a **3-tier strategy** adapted from [dusty-nv/jetson-containers](https://github.com/dusty-nv/jetson-containers):
-
-1. **GitHub Releases**: Check our own cached wheels (fastest)
-2. **Jetson AI Lab PyPI**: Try [pypi.jetson-ai-lab.dev](https://pypi.jetson-ai-lab.dev)
-3. **Source Build**: Compile from source if both fail
-
-Built wheels are automatically uploaded to GitHub Releases for future use!
-
-#### How the Build Works
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    GitHub Actions Workflow                       │
-├─────────────────────────────────────────────────────────────────┤
-│  1. Setup QEMU for ARM64 emulation                              │
-│  2. Pull nvcr.io/nvidia/l4t-base:r36.2.0 (includes CUDA)        │
-│  3. Install Miniforge (provides Python 3.11/3.12 for ARM64)     │
-│  4. Run install scripts:                                        │
-│     ├── install.sh                                              │
-│     │   ├── Try: GitHub Releases (our cached wheels)           │
-│     │   ├── Try: Jetson AI Lab PyPI                            │
-│     │   └── Fall back: Build from source                       │
-│     ├── build-torchvision.sh (same strategy)                   │
-│     └── build-torchaudio.sh (same strategy)                    │
-│  5. Extract & upload wheels to GitHub Releases                  │
-│  6. Push Docker image to Docker Hub & GHCR                      │
-└─────────────────────────────────────────────────────────────────┘
-
-Wheel Sources:
-- GitHub Releases: https://github.com/911218sky/pytorch-docker-build/releases
-- Jetson AI Lab: https://pypi.jetson-ai-lab.dev
-```
-
-### Supported Configurations
-
-| JetPack | L4T Version | CUDA | Ubuntu |
-| ------- | ----------- | ---- | ------ |
-| 6.0     | r36.2.0     | 12.2 | 22.04  |
-| 6.1     | r36.4.0     | 12.6 | 22.04  |
-
-### Available Jetson Images
-
-| Tag                  | PyTorch | JetPack | Python |
-| -------------------- | ------- | ------- | ------ |
-| `2.7.1-jp6.0-py3.11` | 2.7.1   | 6.0     | 3.11   |
-| `2.7.1-jp6.0-py3.12` | 2.7.1   | 6.0     | 3.12   |
-| `2.8.0-jp6.0-py3.11` | 2.8.0   | 6.0     | 3.11   |
-| `2.8.0-jp6.0-py3.12` | 2.8.0   | 6.0     | 3.12   |
-| `2.9.0-jp6.0-py3.11` | 2.9.0   | 6.0     | 3.11   |
-| `2.9.0-jp6.0-py3.12` | 2.9.0   | 6.0     | 3.12   |
-
-### Pull Jetson Images
+### 從源代碼編譯（本地）
 
 ```bash
-# From Docker Hub
-docker pull sky1218/pytorch-jetson:2.7.0-jp6.0-py3.11
-
-# From GitHub Container Registry
-docker pull ghcr.io/911218sky/pytorch-jetson:2.7.0-jp6.0-py3.11
+docker build \
+  --build-arg CUDA_BASE_VERSION=13.0.1 \
+  --build-arg UBUNTU_VERSION=24.04 \
+  --build-arg PYTHON_VERSION=3.12 \
+  --build-arg TORCH_VERSION=2.9.0 \
+  --build-arg CUDA_VERSION=13.0 \
+  --build-arg MAX_JOBS=8 \
+  --build-arg TORCH_CUDA_ARCH_LIST="8.9;9.0;10.0+PTX" \
+  -f Dockerfile.source.template \
+  -t my-pytorch:source .
 ```
 
-### Run on Jetson
+### Jetson（需要 ARM64 或 QEMU）
 
 ```bash
-# Run with GPU support on Jetson
-docker run --runtime nvidia -it sky1218/pytorch-jetson:2.7.0-jp6.0-py3.11
-
-# Mount your code
-docker run --runtime nvidia -v $(pwd):/app -it sky1218/pytorch-jetson:2.7.0-jp6.0-py3.11
-```
-
-### Trigger Jetson Builds
-
-```bash
-# Build single version
-./trigger-build-jetson.sh 2.7.0-jp6.0-py3.11
-
-# Build multiple versions
-./trigger-build-jetson.sh 2.7.0-jp6.0-py3.11 2.7.0-jp6.0-py3.12
-
-# Build from JSON file
-./trigger-build-jetson.sh -f versions-jetson.jsonc
-
-# Build all default Jetson versions
-./trigger-build-jetson.sh
-
-# Show help
-./trigger-build-jetson.sh --help
-```
-
-### Local Jetson Build
-
-Build locally for Jetson (requires ARM64 or QEMU).
-
-> ⚠️ **Note**: PyTorch is built **from source**. Build time: **2-4 hours** with QEMU emulation.
-
-```bash
-# Using docker buildx for cross-platform build
 docker buildx build \
   --platform linux/arm64 \
   --build-arg L4T_VERSION=r36.2.0 \
-  --build-arg TORCH_VERSION=2.7.0 \
+  --build-arg TORCH_VERSION=2.7.1 \
   --build-arg PYTHON_VERSION=3.11 \
   --build-arg MAX_JOBS=2 \
   -f Dockerfile.jetson.template \
-  -t sky1218/pytorch-jetson:2.7.0-jp6.0-py3.11 .
+  -t my-pytorch-jetson:latest .
 ```
 
-#### Build Arguments
+---
 
-| Argument         | Description                                 | Default   |
-| ---------------- | ------------------------------------------- | --------- |
-| `L4T_VERSION`    | L4T base image version                      | `r36.2.0` |
-| `TORCH_VERSION`  | PyTorch version to build from source        | `2.7.0`   |
-| `PYTHON_VERSION` | Python version (via Miniforge)              | `3.11`    |
-| `MAX_JOBS`       | Parallel compile jobs (lower = less memory) | `4`       |
+## ⚙️ GitHub Actions 設定
 
-## Links
+在 Repository Settings → Secrets 中添加：
 
-- Docker Hub (x86): https://hub.docker.com/r/sky1218/pytorch
-- Docker Hub (Jetson): https://hub.docker.com/r/sky1218/pytorch-jetson
-- GitHub: https://github.com/911218sky/pytorch-docker-build
+| Secret               | 說明                    |
+| -------------------- | ----------------------- |
+| `DOCKERHUB_USERNAME` | Docker Hub 帳號         |
+| `DOCKERHUB_TOKEN`    | Docker Hub Access Token |
 
-## License
+Token 申請：https://hub.docker.com/settings/security
 
-MIT
+---
+
+## 📁 專案結構
+
+```
+.
+├── .github/workflows/
+│   ├── build-pytorch.yml      # AMD64 建構 workflow
+│   └── build-jetson.yml       # Jetson 建構 workflow
+├── scripts/pytorch/
+│   ├── build-from-source.sh          # Jetson PyTorch 編譯
+│   ├── build-from-source-amd64.sh    # AMD64 PyTorch 編譯
+│   ├── build-torchvision.sh          # Jetson torchvision
+│   ├── build-torchvision-amd64.sh    # AMD64 torchvision
+│   ├── build-torchaudio.sh           # Jetson torchaudio
+│   └── build-torchaudio-amd64.sh     # AMD64 torchaudio
+├── Dockerfile.template               # 預編譯 wheel 安裝
+├── Dockerfile.source.template        # 源代碼編譯
+├── Dockerfile.jetson.template        # Jetson 專用
+├── trigger-build.sh                  # AMD64 觸發腳本
+└── trigger-build-jetson.sh           # Jetson 觸發腳本
+```
+
+---
+
+## 🔗 連結
+
+| 資源                      | 連結                                                       |
+| ------------------------- | ---------------------------------------------------------- |
+| Docker Hub (AMD64)        | https://hub.docker.com/r/sky1218/pytorch                   |
+| Docker Hub (Jetson)       | https://hub.docker.com/r/sky1218/pytorch-jetson            |
+| GitHub Releases           | https://github.com/911218sky/pytorch-docker-build/releases |
+| GitHub Container Registry | https://ghcr.io/911218sky/pytorch                          |
+
+---
+
+## 📄 License
+
+MIT License
