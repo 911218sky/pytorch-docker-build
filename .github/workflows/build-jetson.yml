@@ -1,4 +1,4 @@
-name: Build Jetson PyTorch Docker Images (From Source)
+name: Build Jetson PyTorch Docker Images
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       versions:
         description: "Version matrix JSON"
         required: true
-        default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.0","python":"3.11"}]'
+        default: '[{"l4t":"r36.2.0","jetpack":"6.0","torch":"2.7.1","python":"3.11"}]'
         type: string
 
 env:
@@ -16,20 +16,20 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # 6 hours (source build takes 2-4 hours)
+    timeout-minutes: 360 # 6 hours max
     permissions:
-      contents: read
+      contents: write # For uploading releases
       packages: write
     strategy:
       fail-fast: false
-      max-parallel: 2 # Limit parallel builds
+      max-parallel: 2
       matrix:
         version: ${{ fromJson(inputs.versions) }}
 
     steps:
       - name: Free disk space
         run: |
-          echo "Freeing disk space for source build..."
+          echo "Freeing disk space..."
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
@@ -71,20 +71,23 @@ jobs:
           TORCH_VERSION="${{ matrix.version.torch }}"
           PYTHON_VERSION="${{ matrix.version.python }}"
 
-          # Create tag: torch-jp[jetpack]-py[python]
           TAG="${TORCH_VERSION}-jp${JETPACK_VERSION}-py${PYTHON_VERSION}"
+          RELEASE_TAG="jetson-wheels-v${TORCH_VERSION}"
 
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+          echo "torch_version=${TORCH_VERSION}" >> $GITHUB_OUTPUT
+          echo "python_version=${PYTHON_VERSION}" >> $GITHUB_OUTPUT
+
           echo "========================================"
-          echo "Building Jetson image FROM SOURCE: $TAG"
+          echo "Building Jetson image: $TAG"
           echo "========================================"
           echo "  Base: nvcr.io/nvidia/l4t-base:${L4T_VERSION}"
           echo "  L4T: $L4T_VERSION"
           echo "  JetPack: $JETPACK_VERSION"
-          echo "  PyTorch: $TORCH_VERSION (building from source)"
-          echo "  Python: $PYTHON_VERSION (via Miniforge)"
-          echo ""
-          echo "⚠️  This build may take 2-4 hours due to QEMU ARM64 emulation"
+          echo "  PyTorch: $TORCH_VERSION"
+          echo "  Python: $PYTHON_VERSION"
+          echo "  Wheel Release Tag: $RELEASE_TAG"
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -101,6 +104,44 @@ jobs:
             TORCH_VERSION=${{ matrix.version.torch }}
             PYTHON_VERSION=${{ matrix.version.python }}
             MAX_JOBS=2
+            GITHUB_OWNER=${{ github.repository_owner }}
+            GITHUB_REPO=${{ github.event.repository.name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          no-cache: false
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Extract wheels from image
+        run: |
+          docker load -i /tmp/image.tar
+          IMAGE_ID=$(docker images -q | head -1)
+          mkdir -p wheels
+          docker run --rm -v $(pwd)/wheels:/output $IMAGE_ID sh -c "cp /wheels/*.whl /output/ 2>/dev/null || echo 'No wheels found (may have used cached wheels)'"
+          ls -la wheels/ || echo "No wheels extracted"
+
+      - name: Upload wheels to GitHub Release
+        if: hashFiles('wheels/*.whl') != ''
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: "Jetson Wheels - PyTorch ${{ steps.tag.outputs.torch_version }}"
+          body: |
+            Pre-built PyTorch wheels for NVIDIA Jetson (ARM64)
+
+            - PyTorch: ${{ steps.tag.outputs.torch_version }}
+            - Python: ${{ steps.tag.outputs.python_version }}
+            - Platform: linux/arm64 (Jetson)
+
+            Install with:
+            ```bash
+            pip install <wheel_url>
+            ```
+          files: wheels/*.whl
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push final image
+        run: |
+          docker load -i /tmp/image.tar
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tag.outputs.tag }}
+          docker push ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}

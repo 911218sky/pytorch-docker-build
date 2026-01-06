@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Build PyTorch from source for Jetson
+# Saves wheel to /wheels for upload to GitHub releases
 # Adapted from: https://github.com/dusty-nv/jetson-containers
 set -ex
 
@@ -9,6 +10,9 @@ PYTORCH_BUILD_VERSION="${PYTORCH_BUILD_VERSION:-${TORCH_VERSION}}"
 echo "========================================"
 echo "Building PyTorch ${PYTORCH_BUILD_VERSION}"
 echo "========================================"
+
+# Create wheels directory for upload
+mkdir -p /wheels
 
 # Clone PyTorch repository
 git clone --branch "v${PYTORCH_BUILD_VERSION}" --depth=1 --recursive https://github.com/pytorch/pytorch /opt/pytorch || \
@@ -55,16 +59,21 @@ export TORCH_NVCC_FLAGS="-Xfatbin -compress-all -compress-mode=size"
 
 # Build wheel
 echo "Starting PyTorch build with MAX_JOBS=${MAX_JOBS:-4}"
-python3 setup.py bdist_wheel --dist-dir /opt
+python3 setup.py bdist_wheel --dist-dir /wheels
 
 # Clean up source
 cd /
 rm -rf /opt/pytorch
 
 # Install the built wheel
-pip install /opt/torch*.whl
+pip install /wheels/torch*.whl
 
 # Verify installation
 python3 -c 'import torch; print(f"PyTorch {torch.__version__} installed successfully"); print(f"CUDA available: {torch.cuda.is_available()}")'
 
+echo "========================================"
 echo "PyTorch build completed!"
+echo "Wheel saved to: /wheels/"
+ls -la /wheels/torch*.whl
+echo "========================================"
+

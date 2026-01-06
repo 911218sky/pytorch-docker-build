@@ -140,10 +140,13 @@ This project supports NVIDIA Jetson Orin devices with ARM64 architecture (JetPac
 
 ### Build Method
 
-PyTorch is **built from source** using scripts adapted from [dusty-nv/jetson-containers](https://github.com/dusty-nv/jetson-containers). This is necessary because:
+Uses a **3-tier strategy** adapted from [dusty-nv/jetson-containers](https://github.com/dusty-nv/jetson-containers):
 
-- NVIDIA official Jetson PyTorch wheels only support Python 3.10
-- Official wheels only go up to PyTorch 2.5
+1. **GitHub Releases**: Check our own cached wheels (fastest)
+2. **Jetson AI Lab PyPI**: Try [pypi.jetson-ai-lab.dev](https://pypi.jetson-ai-lab.dev)
+3. **Source Build**: Compile from source if both fail
+
+Built wheels are automatically uploaded to GitHub Releases for future use!
 
 #### How the Build Works
 
@@ -154,12 +157,20 @@ PyTorch is **built from source** using scripts adapted from [dusty-nv/jetson-con
 │  1. Setup QEMU for ARM64 emulation                              │
 │  2. Pull nvcr.io/nvidia/l4t-base:r36.2.0 (includes CUDA)        │
 │  3. Install Miniforge (provides Python 3.11/3.12 for ARM64)     │
-│  4. Run build scripts (adapted from dusty-nv/jetson-containers):│
-│     ├── scripts/pytorch/build.sh       (PyTorch from source)   │
-│     ├── scripts/pytorch/build-torchvision.sh                   │
-│     └── scripts/pytorch/build-torchaudio.sh                    │
-│  5. Push to Docker Hub & GitHub Container Registry              │
+│  4. Run install scripts:                                        │
+│     ├── install.sh                                              │
+│     │   ├── Try: GitHub Releases (our cached wheels)           │
+│     │   ├── Try: Jetson AI Lab PyPI                            │
+│     │   └── Fall back: Build from source                       │
+│     ├── build-torchvision.sh (same strategy)                   │
+│     └── build-torchaudio.sh (same strategy)                    │
+│  5. Extract & upload wheels to GitHub Releases                  │
+│  6. Push Docker image to Docker Hub & GHCR                      │
 └─────────────────────────────────────────────────────────────────┘
+
+Wheel Sources:
+- GitHub Releases: https://github.com/911218sky/pytorch-docker-build/releases
+- Jetson AI Lab: https://pypi.jetson-ai-lab.dev
 ```
 
 ### Supported Configurations

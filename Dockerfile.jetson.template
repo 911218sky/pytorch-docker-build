@@ -1,10 +1,12 @@
 # Jetson PyTorch Docker Image Template
 # JetPack 6.x only (L4T R36.x) - ARM64 architecture
 #
-# Builds PyTorch from source using scripts adapted from:
-# https://github.com/dusty-nv/jetson-containers
+# Build Strategy:
+# 1. Try own GitHub releases (cached wheels)
+# 2. Try Jetson AI Lab PyPI (https://pypi.jetson-ai-lab.dev)
+# 3. Build from source if both fail
 #
-# Build time: 2-4 hours (QEMU emulation)
+# Adapted from: https://github.com/dusty-nv/jetson-containers
 
 ARG L4T_VERSION=r36.2.0
 ARG PYTHON_VERSION=3.11
@@ -15,6 +17,8 @@ FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
 ARG TORCH_VERSION=2.7.0
 ARG PYTHON_VERSION=3.11
 ARG MAX_JOBS=4
+ARG GITHUB_OWNER=911218sky
+ARG GITHUB_REPO=pytorch-docker-build
 
 # Build configuration
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -23,7 +27,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CUDA_HOME=/usr/local/cuda \
     PATH=/usr/local/cuda/bin:${PATH} \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH} \
-    MAX_JOBS=${MAX_JOBS}
+    MAX_JOBS=${MAX_JOBS} \
+    TORCH_VERSION=${TORCH_VERSION} \
+    PYTHON_VERSION=${PYTHON_VERSION} \
+    GITHUB_OWNER=${GITHUB_OWNER} \
+    GITHUB_REPO=${GITHUB_REPO}
 
 # Install system dependencies
 RUN apt-get update && \
@@ -46,15 +54,12 @@ RUN apt-get update && \
     # For torchaudio
     libsndfile1-dev \
     ffmpeg \
-    # Python build deps
+    # Python
     python3 \
     python3-pip \
     python3-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
-
-# Install uv for faster pip installs
-RUN pip3 install --no-cache-dir uv
 
 # Install Miniforge for custom Python version
 ENV CONDA_DIR=/opt/conda
@@ -71,7 +76,7 @@ RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Mi
 ENV PATH=${CONDA_DIR}/envs/pytorch/bin:${PATH}
 ENV CONDA_DEFAULT_ENV=pytorch
 
-# Upgrade GCC on Ubuntu 22.04 for GLIBCXX_3.4.32 support
+# Upgrade GCC on Ubuntu 22.04 for GLIBCXX_3.4.32 support (needed for source builds)
 RUN UBUNTU_VERSION=$(grep VERSION_ID /etc/os-release | cut -d '"' -f 2) && \
     if [ "$UBUNTU_VERSION" = "22.04" ]; then \
     echo "Ubuntu 22.04 detected - installing GCC 13" && \
@@ -85,41 +90,39 @@ RUN UBUNTU_VERSION=$(grep VERSION_ID /etc/os-release | cut -d '"' -f 2) && \
 
 # Copy build scripts
 COPY scripts/pytorch/ /tmp/pytorch/
+RUN chmod +x /tmp/pytorch/*.sh
 
-# Install Python build requirements
+# Install Python build requirements (needed for source builds)
 RUN pip install --no-cache-dir \
     setuptools>=70.1.0 \
-    "cmake>=3.27" \
+    wheel \
     ninja \
     numpy \
     packaging \
     pyyaml \
-    requests \
-    six \
     typing-extensions>=4.10.0 \
     scikit-build \
-    wheel \
-    filelock \
     sympy \
+    filelock \
     networkx \
     jinja2 \
-    fsspec \
-    optree
+    fsspec
 
-# Build PyTorch from source
-WORKDIR /opt
-RUN /tmp/pytorch/build.sh
+# Install PyTorch (tries PyPI first, falls back to source build)
+RUN /tmp/pytorch/install.sh
 
-# Build torchvision from source
-RUN /tmp/pytorch/build-torchvision.sh || true
+# Install torchvision
+RUN /tmp/pytorch/build-torchvision.sh || echo "torchvision install failed, continuing..."
 
-# Build torchaudio from source
-RUN /tmp/pytorch/build-torchaudio.sh || true
+# Install torchaudio
+RUN /tmp/pytorch/build-torchaudio.sh || echo "torchaudio install failed, continuing..."
 
 # Cleanup
-RUN rm -rf /opt/*.whl /tmp/pytorch /root/.cache
+RUN rm -rf /tmp/pytorch /root/.cache /opt/*.whl
 
 WORKDIR /app
 
 # Verify installation
-RUN python3 -c "import torch; print(f'Python: {__import__(\"sys\").version}'); print(f'PyTorch {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}')" || true
+RUN python3 -c "import torch; print(f'Python: {__import__(\"sys\").version}'); print(f'PyTorch {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}')" && \
+    python3 -c "import torchvision; print(f'torchvision {torchvision.__version__}')" || true && \
+    python3 -c "import torchaudio; print(f'torchaudio {torchaudio.__version__}')" || true
