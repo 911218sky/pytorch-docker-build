@@ -1,0 +1,22 @@
+// Jetson version configurations (JetPack 6.x only)
+// l4t: Linux for Tegra version (base image)
+// jetpack: JetPack version
+// torch: PyTorch version to build
+// python: Python version (via Miniforge)
+//
+// JetPack 6.0 (L4T R36.2.0): Ubuntu 22.04, CUDA 12.2
+// JetPack 6.1 (L4T R36.4.0): Ubuntu 22.04, CUDA 12.6
+//
+// Build Strategy:
+// 1. Check GitHub releases for cached wheels
+// 2. Try Jetson AI Lab PyPI (pypi.jetson-ai-lab.dev)
+// 3. Build from source if both fail
+// 4. Upload built wheels to GitHub releases for future use
+[
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.7.1", "python": "3.11"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.7.1", "python": "3.12"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.8.0", "python": "3.11"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.8.0", "python": "3.12"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.9.0", "python": "3.11"},
+  {"l4t": "r36.2.0", "jetpack": "6.0", "torch": "2.9.0", "python": "3.12"}
+]
