@@ -8,6 +8,21 @@ on:
         required: true
         default: '[{"torch":"2.8.0","cuda":"12.9","python":"3.11"}]'
         type: string
+      build_from_source:
+        description: "Build PyTorch from source code (slower but allows customization)"
+        required: false
+        default: false
+        type: boolean
+      cuda_arch_list:
+        description: "CUDA architectures to compile for (only used when building from source)"
+        required: false
+        default: "8.0;8.6;8.9;9.0;10.0+PTX"
+        type: string
+      max_jobs:
+        description: "Max parallel jobs for compilation (only used when building from source)"
+        required: false
+        default: "4"
+        type: string
 
 env:
   DOCKERHUB_IMAGE: sky1218/pytorch
@@ -16,15 +31,29 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.build_from_source && 360 || 60 }}
     permissions:
-      contents: read
+      contents: write # For uploading releases
       packages: write
     strategy:
       fail-fast: false
       matrix:
         version: ${{ fromJson(inputs.versions) }}
-    
+
     steps:
+      - name: Free disk space (for source builds)
+        if: ${{ inputs.build_from_source }}
+        run: |
+          echo "Freeing disk space for source build..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /opt/hostedtoolcache/go
+          sudo rm -rf /opt/hostedtoolcache/node
+          sudo docker image prune --all --force
+          df -h
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -50,19 +79,51 @@ jobs:
           TORCH_VERSION="${{ matrix.version.torch }}"
           CUDA_VERSION="${{ matrix.version.cuda }}"
           PYTHON_VERSION="${{ matrix.version.python }}"
-          
+          BUILD_FROM_SOURCE="${{ inputs.build_from_source }}"
+
           # Convert cuda version: 12.9 -> cu129
           CUDA_SHORT=$(echo "$CUDA_VERSION" | tr -d '.')
           CUDA_WHL="cu${CUDA_SHORT}"
-          
-          # Convert python version: 3.11 -> 3.11 (keep as is for base image)
-          TAG="${TORCH_VERSION}-cuda${CUDA_VERSION}-py${PYTHON_VERSION}"
-          
+
+          # CUDA base version for source builds (e.g., 12.8 -> 12.8.0)
+          # Use latest patch version for CUDA 13.x
+          case "$CUDA_VERSION" in
+            13.0) CUDA_BASE_VERSION="13.0.1" ;;
+            13.1) CUDA_BASE_VERSION="13.1.0" ;;
+            *) CUDA_BASE_VERSION="${CUDA_VERSION}.0" ;;
+          esac
+
+          # Select Ubuntu version based on CUDA version
+          # CUDA 13.x requires Ubuntu 24.04
+          CUDA_MAJOR=$(echo "$CUDA_VERSION" | cut -d'.' -f1)
+          if [ "$CUDA_MAJOR" -ge 13 ]; then
+            UBUNTU_VERSION="24.04"
+          else
+            UBUNTU_VERSION="22.04"
+          fi
+
+          # Generate tag with optional -source suffix
+          if [ "$BUILD_FROM_SOURCE" = "true" ]; then
+            TAG="${TORCH_VERSION}-cuda${CUDA_VERSION}-py${PYTHON_VERSION}-source"
+          else
+            TAG="${TORCH_VERSION}-cuda${CUDA_VERSION}-py${PYTHON_VERSION}"
+          fi
+
+          # Release tag for wheel uploads
+          RELEASE_TAG="amd64-wheels-v${TORCH_VERSION}-cuda${CUDA_VERSION}"
+
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "cuda_whl=${CUDA_WHL}" >> $GITHUB_OUTPUT
-          echo "Building: $TAG"
+          echo "cuda_base_version=${CUDA_BASE_VERSION}" >> $GITHUB_OUTPUT
+          echo "ubuntu_version=${UBUNTU_VERSION}" >> $GITHUB_OUTPUT
+          echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+          echo "torch_version=${TORCH_VERSION}" >> $GITHUB_OUTPUT
+          echo "python_version=${PYTHON_VERSION}" >> $GITHUB_OUTPUT
+          echo "cuda_version=${CUDA_VERSION}" >> $GITHUB_OUTPUT
+          echo "Building: $TAG (from source: $BUILD_FROM_SOURCE, Ubuntu: $UBUNTU_VERSION)"
 
-      - name: Build and push
+      - name: Build and push (precompiled wheel)
+        if: ${{ !inputs.build_from_source }}
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -77,3 +138,90 @@ jobs:
             CUDA_VERSION=${{ steps.tag.outputs.cuda_whl }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build from source (save to local)
+        if: ${{ inputs.build_from_source }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.source.template
+          push: false
+          tags: |
+            ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}
+          build-args: |
+            CUDA_BASE_VERSION=${{ steps.tag.outputs.cuda_base_version }}
+            UBUNTU_VERSION=${{ steps.tag.outputs.ubuntu_version }}
+            PYTHON_VERSION=${{ matrix.version.python }}
+            TORCH_VERSION=${{ matrix.version.torch }}
+            CUDA_VERSION=${{ matrix.version.cuda }}
+            MAX_JOBS=${{ inputs.max_jobs }}
+            TORCH_CUDA_ARCH_LIST=${{ inputs.cuda_arch_list }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Extract wheels from image
+        if: ${{ inputs.build_from_source }}
+        run: |
+          docker load -i /tmp/image.tar
+          IMAGE_ID=$(docker images -q | head -1)
+          mkdir -p wheels
+          docker run --rm -v $(pwd)/wheels:/output $IMAGE_ID sh -c "cp /wheels/*.whl /output/ 2>/dev/null || echo 'No wheels found'"
+          ls -la wheels/ || echo "No wheels extracted"
+
+      - name: Compress wheels (split if > 2GB)
+        if: ${{ inputs.build_from_source && hashFiles('wheels/*.whl') != '' }}
+        run: |
+          cd wheels
+          TOTAL_SIZE=$(du -sb . | cut -f1)
+          echo "Total wheels size: $TOTAL_SIZE bytes"
+
+          # 2GB = 2147483648 bytes
+          MAX_SIZE=2147483648
+
+          if [ "$TOTAL_SIZE" -gt "$MAX_SIZE" ]; then
+            echo "Size exceeds 2GB, creating split archive..."
+            # Split into 1.9GB parts (leave some margin for GitHub's 2GB limit)
+            tar -cvf - *.whl | split -b 1900M - pytorch-wheels.tar.part
+            ls -la pytorch-wheels.tar.part*
+            echo "split_archive=true" >> $GITHUB_OUTPUT
+          else
+            echo "Size under 2GB, creating single archive..."
+            tar -czvf pytorch-wheels.tar.gz *.whl
+            ls -la pytorch-wheels.tar.gz
+            echo "split_archive=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload wheels to GitHub Release
+        if: ${{ inputs.build_from_source && hashFiles('wheels/*.whl') != '' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: "AMD64 Wheels - PyTorch ${{ steps.tag.outputs.torch_version }} CUDA ${{ steps.tag.outputs.cuda_version }}"
+          body: |
+            Pre-built PyTorch wheels for AMD64/x86_64 (built from source)
+
+            - PyTorch: ${{ steps.tag.outputs.torch_version }}
+            - CUDA: ${{ steps.tag.outputs.cuda_version }}
+            - Python: ${{ steps.tag.outputs.python_version }}
+            - Platform: linux/amd64
+            - CUDA Architectures: ${{ inputs.cuda_arch_list }}
+
+            ## Download
+            - Individual `.whl` files can be installed directly with `pip install <url>`
+            - Archive file(s) contain all wheels bundled together
+          files: |
+            wheels/*.whl
+            wheels/pytorch-wheels.tar.gz
+            wheels/pytorch-wheels.tar.part*
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push final image
+        if: ${{ inputs.build_from_source }}
+        run: |
+          docker load -i /tmp/image.tar
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tag.outputs.tag }}
+          docker push ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}

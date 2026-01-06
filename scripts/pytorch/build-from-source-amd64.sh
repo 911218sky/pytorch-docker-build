@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Build PyTorch from source for Jetson
-# Saves wheel to /wheels for upload to GitHub releases
-# Adapted from: https://github.com/dusty-nv/jetson-containers
+# Build PyTorch from source for AMD64/x86_64
+# Saves wheel to /wheels for caching
 set -ex
 
-TORCH_VERSION="${TORCH_VERSION:-2.7.0}"
+TORCH_VERSION="${TORCH_VERSION:-2.8.0}"
 PYTORCH_BUILD_VERSION="${PYTORCH_BUILD_VERSION:-${TORCH_VERSION}}"
+CUDA_VERSION="${CUDA_VERSION:-12.9}"
 
 echo "========================================"
-echo "Building PyTorch ${PYTORCH_BUILD_VERSION}"
+echo "Building PyTorch ${PYTORCH_BUILD_VERSION} for AMD64"
+echo "CUDA Version: ${CUDA_VERSION}"
 echo "========================================"
 
 # Create wheels directory for upload
@@ -20,47 +21,37 @@ git clone --depth=1 --recursive https://github.com/pytorch/pytorch /opt/pytorch
 
 cd /opt/pytorch
 
-# Apply cpuinfo patch for ARM (https://github.com/pytorch/pytorch/issues/138333)
-CPUINFO_PATCH=third_party/cpuinfo/src/arm/linux/aarch64-isa.c
-if [ -f "${CPUINFO_PATCH}" ]; then
-    sed -i 's|cpuinfo_log_error|cpuinfo_log_warning|' ${CPUINFO_PATCH}
-    echo "Applied cpuinfo patch"
-fi
-
 # Install PyTorch requirements
 pip install -r requirements.txt || true
 
-# Set build flags
-export USE_PRIORITIZED_TEXT_FOR_LD=1  # mandatory for ARM
+# Set build flags for AMD64
 export PYTORCH_BUILD_NUMBER=1
 export USE_CUDA=1
 export USE_CUDNN=1
-export TORCH_CUDA_ARCH_LIST="8.7"
-export USE_NCCL=${USE_NCCL:-0}
-export USE_DISTRIBUTED=${USE_DISTRIBUTED:-0}
-export USE_MKLDNN=0
-export USE_FBGEMM=0
-export USE_QNNPACK=0
-export USE_NNPACK=0
-export USE_XNNPACK=${USE_XNNPACK:-1}
-export USE_PYTORCH_QNNPACK=${USE_PYTORCH_QNNPACK:-1}
+export USE_NCCL=${USE_NCCL:-1}
+export USE_DISTRIBUTED=${USE_DISTRIBUTED:-1}
+export USE_MKLDNN=1
+export USE_FBGEMM=1
+export USE_QNNPACK=1
+export USE_NNPACK=1
+export USE_XNNPACK=1
+export USE_PYTORCH_QNNPACK=1
 export BUILD_TEST=0
 export USE_MPI=0
 export USE_TENSORRT=0
 export USE_FLASH_ATTENTION=1
 export USE_MEM_EFF_ATTENTION=1
-export USE_NATIVE_ARCH=0
 
-# BLAS settings for ARM
-export USE_BLAS=1
-export BLAS=OpenBLAS
+# CUDA architecture list for common GPUs
+# https://developer.nvidia.com/cuda-gpus
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-5.2;6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX}"
 
 # NVCC flags for compression
-export TORCH_NVCC_FLAGS="-Xfatbin -compress-all -compress-mode=size"
+export TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
 
 # Build wheel
-echo "Starting PyTorch build with MAX_JOBS=${MAX_JOBS:-4}"
-python3 setup.py bdist_wheel --dist-dir /wheels
+echo "Starting PyTorch build with MAX_JOBS=${MAX_JOBS:-$(nproc)}"
+MAX_JOBS=${MAX_JOBS:-$(nproc)} python3 setup.py bdist_wheel --dist-dir /wheels
 
 # Clean up source
 cd /
@@ -77,4 +68,3 @@ echo "PyTorch build completed!"
 echo "Wheel saved to: /wheels/"
 ls -la /wheels/torch*.whl
 echo "========================================"
-

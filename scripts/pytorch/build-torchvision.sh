@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install torchvision for Jetson
-# Priority: GitHub releases -> Jetson AI Lab PyPI -> Source build
+# Priority: GitHub releases -> Source build
 set -ex
 
 PYTORCH_VERSION=$(python3 -c "import torch; print(torch.__version__.split('+')[0])")
@@ -37,28 +37,23 @@ echo "Step 1: Checking GitHub releases..."
 RELEASE_TAG="jetson-wheels-v${PYTORCH_VERSION}"
 WHEEL_URL="${GITHUB_RELEASE_URL}/${RELEASE_TAG}/${WHEEL_NAME}"
 
+mkdir -p /wheels
+
 if curl --output /dev/null --silent --head --fail "${WHEEL_URL}"; then
     echo "Found wheel in GitHub releases"
-    if pip install --no-cache-dir "${WHEEL_URL}"; then
+    # Download wheel to /wheels for export
+    if curl -L -o "/wheels/${WHEEL_NAME}" "${WHEEL_URL}"; then
+        pip install --no-cache-dir "/wheels/${WHEEL_NAME}"
         echo "✓ torchvision installed from GitHub releases"
+        echo "Wheel saved to /wheels/"
+        ls -la /wheels/torchvision*.whl
         python3 -c 'import torchvision; print(f"torchvision {torchvision.__version__} installed")'
         exit 0
     fi
 fi
 
-# Step 2: Try Jetson AI Lab PyPI
-echo "Step 2: Trying Jetson AI Lab PyPI..."
-if pip install --no-cache-dir \
-    --index-url https://pypi.jetson-ai-lab.dev/simple \
-    --trusted-host pypi.jetson-ai-lab.dev \
-    torchvision 2>/dev/null; then
-    echo "✓ torchvision installed from Jetson AI Lab PyPI"
-    python3 -c 'import torchvision; print(f"torchvision {torchvision.__version__} installed")'
-    exit 0
-fi
-
-# Step 3: Build from source
-echo "Step 3: Building torchvision ${VISION_VERSION} from source..."
+# Step 2: Build from source
+echo "Step 2: Building torchvision ${VISION_VERSION} from source..."
 
 mkdir -p /wheels
 
