@@ -3,16 +3,16 @@
 #
 # Builds PyTorch from source to support any version
 # WARNING: Build time can be several hours due to compilation
+#
+# Note: L4T r36.2.0 is based on Ubuntu 22.04 with Python 3.10
 
 ARG L4T_VERSION=r36.2.0
-ARG PYTHON_VERSION=3.11
 
 # Use NVIDIA L4T base image
 FROM nvcr.io/nvidia/l4t-base:${L4T_VERSION}
 
 ARG TORCH_VERSION=2.9.0
 ARG CUDA_VERSION=12.8
-ARG PYTHON_VERSION=3.11
 
 # Build configuration
 ARG MAX_JOBS=4
@@ -35,34 +35,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     MAX_JOBS=${MAX_JOBS} \
     BUILD_TEST=${BUILD_TEST}
 
-# Install system dependencies and specified Python version
+# Install system dependencies (use system Python 3.10)
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-    software-properties-common \
-    gnupg2 \
-    lsb-release; \
-    \
-    # Add deadsnakes PPA for Python versions
-    add-apt-repository -y ppa:deadsnakes/ppa; \
-    apt-get update; \
-    \
-    # Install specified Python version
-    apt-get install -y --no-install-recommends \
-    python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-venv \
-    python${PYTHON_VERSION}-dev \
-    python${PYTHON_VERSION}-distutils; \
-    \
-    # Set as default python
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1; \
-    update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1; \
-    \
-    # Install pip
-    curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION}; \
-    \
-    # Install build dependencies
-    apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-venv \
     build-essential \
     git \
     curl \
@@ -101,11 +81,16 @@ RUN set -eux; \
     libffi-dev \
     liblzma-dev; \
     \
+    # Create python symlink
+    ln -sf /usr/bin/python3 /usr/bin/python; \
+    \
+    # Upgrade pip
+    python3 -m pip install --upgrade pip setuptools wheel; \
+    \
     rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip and install Python build dependencies
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    python -m pip install --no-cache-dir \
+# Install Python build dependencies
+RUN python3 -m pip install --no-cache-dir \
     numpy \
     'cython<3' \
     pyyaml \
@@ -120,7 +105,6 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
     cffi \
     future \
     ninja \
-    cmake \
     scikit-build
 
 # Clone and build PyTorch from source
@@ -135,7 +119,7 @@ RUN set -eux; \
     pip install --no-cache-dir -r requirements.txt; \
     \
     # Build PyTorch
-    python setup.py bdist_wheel; \
+    python3 setup.py bdist_wheel; \
     \
     # Install the built wheel
     pip install --no-cache-dir dist/*.whl; \
@@ -163,12 +147,12 @@ RUN set -eux; \
     \
     git clone --recursive --depth 1 --branch v${VISION_VERSION} https://github.com/pytorch/vision.git; \
     cd vision; \
-    python setup.py bdist_wheel; \
+    python3 setup.py bdist_wheel; \
     pip install --no-cache-dir dist/*.whl; \
     cd /; \
     rm -rf /build/vision
 
-# Build and install torchaudio from source
+# Build and install torchaudio from source (optional, may fail)
 RUN set -eux; \
     # Determine compatible torchaudio version based on torch version
     TORCH_MAJOR=$(echo ${TORCH_VERSION} | cut -d. -f1); \
@@ -188,7 +172,7 @@ RUN set -eux; \
     git clone --recursive --depth 1 --branch v${AUDIO_VERSION} https://github.com/pytorch/audio.git || \
     git clone --recursive --depth 1 https://github.com/pytorch/audio.git; \
     cd audio; \
-    python setup.py bdist_wheel || true; \
+    python3 setup.py bdist_wheel || true; \
     pip install --no-cache-dir dist/*.whl || echo "torchaudio build skipped"; \
     cd /; \
     rm -rf /build/audio
@@ -205,5 +189,5 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Verify PyTorch installation
-RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA arch list: {torch.cuda.get_arch_list() if torch.cuda.is_available() else \"N/A\"}')" || \
+RUN python3 -c "import torch; print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA arch list: {torch.cuda.get_arch_list() if torch.cuda.is_available() else \"N/A\"}')" || \
     echo "PyTorch verification will complete on Jetson device"
