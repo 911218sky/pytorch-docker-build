@@ -118,7 +118,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     git wget curl ca-certificates \
     libopenblas0 libomp5 libgomp1 \
-    libjpeg62-turbo libpng16-16 \
+    libjpeg8 libpng16-16 \
     libsndfile1 ffmpeg && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

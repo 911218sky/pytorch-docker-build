@@ -153,14 +153,11 @@ RUN apt-get update && \
     wget \
     curl \
     ca-certificates \
-    # OpenBLAS runtime
     libopenblas0 \
     libomp5 \
     libgomp1 \
-    # For torchvision
-    libjpeg62-turbo \
+    libjpeg8 \
     libpng16-16 \
-    # For torchaudio
     libsndfile1 \
     ffmpeg && \
     apt-get clean && \

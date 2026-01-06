@@ -118,7 +118,7 @@ RUN apt-get update && \
     curl \
     wget \
     ca-certificates \
-    libjpeg-turbo8 \
+    libjpeg8 \
     zlib1g \
     libpng16-16 \
     libsndfile1 \
