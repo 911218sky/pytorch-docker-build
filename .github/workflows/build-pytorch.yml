@@ -31,7 +31,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.build_from_source && 360 || 60 }}
+    timeout-minutes: 360
     permissions:
       contents: write # For uploading releases
       packages: write
