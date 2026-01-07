@@ -191,13 +191,13 @@ jobs:
           if [ "$TOTAL_SIZE" -gt "$MAX_SIZE" ]; then
             echo "Size exceeds 2GB, creating split archive..."
             # Split into 1.9GB parts (leave some margin for GitHub's 2GB limit)
-            tar -cvf - *.whl | split -b 1900M - pytorch-wheels.tar.part
-            ls -la pytorch-wheels.tar.part*
+            tar -cvf - *.whl | split -b 1900M - pytorch-wheels-py${{ matrix.version.python }}.tar.part
+            ls -la pytorch-wheels-py${{ matrix.version.python }}.tar.part*
             echo "split_archive=true" >> $GITHUB_OUTPUT
           else
             echo "Size under 2GB, creating single archive..."
-            tar -czvf pytorch-wheels.tar.gz *.whl
-            ls -la pytorch-wheels.tar.gz
+            tar -czvf pytorch-wheels-py${{ matrix.version.python }}.tar.gz *.whl
+            ls -la pytorch-wheels-py${{ matrix.version.python }}.tar.gz
             echo "split_archive=false" >> $GITHUB_OUTPUT
           fi
 
@@ -221,8 +221,9 @@ jobs:
             - Archive file(s) contain all wheels bundled together
           files: |
             wheels/*.whl
-            wheels/pytorch-wheels.tar.gz
-            wheels/pytorch-wheels.tar.part*
+            wheels/*.whl
+            wheels/pytorch-wheels-py${{ matrix.version.python }}.tar.gz
+            wheels/pytorch-wheels-py${{ matrix.version.python }}.tar.part*
           fail_on_unmatched_files: false
           generate_release_notes: false
           make_latest: false

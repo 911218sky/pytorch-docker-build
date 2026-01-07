@@ -130,12 +130,12 @@ jobs:
 
           if [ "$TOTAL_SIZE" -gt "$MAX_SIZE" ]; then
             echo "Size exceeds 2GB, creating split archive..."
-            tar -cvf - *.whl | split -b 1900M - pytorch-jetson-wheels.tar.part
-            ls -la pytorch-jetson-wheels.tar.part*
+            tar -cvf - *.whl | split -b 1900M - pytorch-jetson-wheels-py${{ matrix.version.python }}.tar.part
+            ls -la pytorch-jetson-wheels-py${{ matrix.version.python }}.tar.part*
           else
             echo "Size under 2GB, creating single archive..."
-            tar -czvf pytorch-jetson-wheels.tar.gz *.whl
-            ls -la pytorch-jetson-wheels.tar.gz
+            tar -czvf pytorch-jetson-wheels-py${{ matrix.version.python }}.tar.gz *.whl
+            ls -la pytorch-jetson-wheels-py${{ matrix.version.python }}.tar.gz
           fi
 
       - name: Upload wheels to GitHub Release
@@ -158,8 +158,8 @@ jobs:
             ```
           files: |
             wheels/*.whl
-            wheels/pytorch-jetson-wheels.tar.gz
-            wheels/pytorch-jetson-wheels.tar.part*
+            wheels/pytorch-jetson-wheels-py${{ matrix.version.python }}.tar.gz
+            wheels/pytorch-jetson-wheels-py${{ matrix.version.python }}.tar.part*
           fail_on_unmatched_files: false
           generate_release_notes: false
           make_latest: false
