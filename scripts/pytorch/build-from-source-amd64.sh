@@ -15,9 +15,11 @@ echo "========================================"
 # Create wheels directory for upload
 mkdir -p /wheels
 
-# Clone PyTorch repository
-git clone --branch "v${PYTORCH_BUILD_VERSION}" --depth=1 --recursive https://github.com/pytorch/pytorch /opt/pytorch || \
-git clone --depth=1 --recursive https://github.com/pytorch/pytorch /opt/pytorch
+# Check if PyTorch source is mounted
+if [ ! -d "/opt/pytorch" ]; then
+    echo "Error: /opt/pytorch not found. Please mount the PyTorch source code."
+    exit 1
+fi
 
 cd /opt/pytorch
 
@@ -27,24 +29,18 @@ pip install -r requirements.txt || true
 # Set build flags for AMD64
 export PYTORCH_BUILD_NUMBER=1
 export USE_CUDA=1
-export USE_CUDNN=1
-export USE_NCCL=${USE_NCCL:-1}
-export USE_DISTRIBUTED=${USE_DISTRIBUTED:-1}
-export USE_MKLDNN=1
-export USE_FBGEMM=1
-export USE_QNNPACK=1
-export USE_NNPACK=1
-export USE_XNNPACK=1
-export USE_PYTORCH_QNNPACK=1
-export BUILD_TEST=0
+export BUILD_CAFFE2=0
+export USE_DISTRIBUTED=0
 export USE_MPI=0
+export USE_GLOO=0
+export USE_KINETO=0
 export USE_TENSORRT=0
 export USE_FLASH_ATTENTION=1
 export USE_MEM_EFF_ATTENTION=1
 
 # CUDA architecture list for common GPUs
 # https://developer.nvidia.com/cuda-gpus
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-5.2;6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX}"
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0;8.6;8.9;9.0;10.0+PTX}"
 
 # NVCC flags for compression
 export TORCH_NVCC_FLAGS="-Xfatbin -compress-all"

@@ -9,7 +9,6 @@ FROM nvidia/cuda:${CUDA_BASE_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder
 ARG TORCH_VERSION=2.8.0
 ARG CUDA_VERSION=12.8
 ARG PYTHON_VERSION=3.11
-ARG MAX_JOBS=4
 ARG TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;10.0+PTX"
 
 # non-interactive
@@ -81,8 +80,10 @@ RUN chmod +x /tmp/pytorch/*.sh
 ENV TORCH_VERSION=${TORCH_VERSION} \
     PYTORCH_BUILD_VERSION=${TORCH_VERSION} \
     CUDA_VERSION=${CUDA_VERSION} \
-    MAX_JOBS=${MAX_JOBS} \
     TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
+
+# Copy PyTorch source (cloned in GHA)
+COPY pytorch /opt/pytorch
 
 # Build PyTorch from source (wheel saved to /wheels)
 RUN /tmp/pytorch/build-from-source.sh

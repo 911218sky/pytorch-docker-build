@@ -37,7 +37,7 @@ cd /opt/torchaudio
 
 export USE_CUDA=1
 export MAX_JOBS=${MAX_JOBS:-$(nproc)}
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-5.2;6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX}"
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0;8.6;8.9;9.0;10.0+PTX}"
 
 python3 setup.py bdist_wheel --dist-dir /wheels
 pip install /wheels/torchaudio*.whl
