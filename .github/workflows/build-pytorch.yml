@@ -141,6 +141,7 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tag.outputs.tag }}
             ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}
+          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,push=true
           build-args: |
             PYTHON_VERSION=${{ matrix.version.python }}
             TORCH_VERSION=${{ matrix.version.torch }}
@@ -236,7 +237,21 @@ jobs:
 
       - name: Push final image
         if: ${{ inputs.build_from_source }}
-        run: |
-          docker load -i /tmp/image.tar
-          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tag.outputs.tag }}
-          docker push ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.source.template
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}
+          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,push=true
+          build-args: |
+            CUDA_BASE_VERSION=${{ steps.tag.outputs.cuda_base_version }}
+            UBUNTU_VERSION=${{ steps.tag.outputs.ubuntu_version }}
+            PYTHON_VERSION=${{ matrix.version.python }}
+            TORCH_VERSION=${{ matrix.version.torch }}
+            CUDA_VERSION=${{ matrix.version.cuda }}
+            TORCH_CUDA_ARCH_LIST=${{ inputs.cuda_arch_list }}
+          cache-from: type=gha
+          # No cache-to here, we already saved it in the previous step

@@ -171,7 +171,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push final image
-        run: |
-          docker load -i /tmp/image.tar
-          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tag.outputs.tag }}
-          docker push ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.jetson.template
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}
+          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,push=true
+          build-args: |
+            L4T_VERSION=${{ matrix.version.l4t }}
+            TORCH_VERSION=${{ matrix.version.torch }}
+            PYTHON_VERSION=${{ matrix.version.python }}
+            MAX_JOBS=2
+            TORCH_CUDA_ARCH_LIST=${{ inputs.cuda_arch_list }}
+            GITHUB_OWNER=${{ github.repository_owner }}
+            GITHUB_REPO=${{ github.event.repository.name }}
+          cache-from: type=gha
+          # No cache-to needed as it was done in valid build step
