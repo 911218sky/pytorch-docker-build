@@ -138,6 +138,10 @@ jobs:
             ls -la pytorch-jetson-wheels-py${{ matrix.version.python }}.tar.gz
           fi
 
+          # Remove individual wheels > 2GB (GitHub Release limit)
+          # They are already archived in the .tar files above
+          find . -name "*.whl" -size +2000M -exec echo "Skipping standalone upload for {} (size > 2GB)" \; -exec rm {} \;
+
       - name: Upload wheels to GitHub Release
         if: hashFiles('wheels/*.whl') != ''
         uses: softprops/action-gh-release@v1
